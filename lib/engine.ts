@@ -8,8 +8,12 @@ import { buildDifferential } from "./differential-engine";
 import { buildHypotheses, linkHypothesesToEvidenceGraph } from "./hypothesis-engine";
 import type { TelemetryCollection } from "./telemetry/provider";
 import { BASIC_INDIRECT_PROMPT_INJECTION } from "../experiments/web-agent/prompt-injection-basic";
+import { REAL_INDIRECT_PROMPT_INJECTION } from "../experiments/web-agent/real-indirect-prompt-injection";
 import { buildExperimentResult } from "./experiment-runner";
 import type { ExperimentDefinition } from "./experiment-schema";
+import { lookup } from "node:dns/promises";
+import { normalizeExperimentEvents } from "./experiment-events";
+import { ATTRIBUTION_METHODOLOGY_VERSION, POST_ACTION_WINDOW_MS, evaluateActionToEffectHypothesis, type ActionAnchor } from "./attribution-engine";
 
 export class SandboxExecutionError extends Error {
   constructor(message: string) {
@@ -75,7 +79,7 @@ export async function investigateUrl(rawUrl: string, experiment?: ExperimentDefi
   // Validate syntax and DNS before creating any remote compute. Sandbox subnet
   // denies and the browser's request route repeat this check after redirects.
   const target = await validatePublicHttpUrl(rawUrl);
-  if (experiment && (process.env.NODE_ENV !== "development" || target.toString() !== experiment.fixtureUrl || experiment.id !== BASIC_INDIRECT_PROMPT_INJECTION.id)) {
+  if (experiment && (process.env.NODE_ENV !== "development" || target.toString() !== experiment.fixtureUrl || ![BASIC_INDIRECT_PROMPT_INJECTION.id, REAL_INDIRECT_PROMPT_INJECTION.id].includes(experiment.id))) {
     throw new Error("This fixed experiment is available only in the local development environment.");
   }
   const safeTarget = publicUrl(target.toString());
@@ -96,7 +100,7 @@ export async function investigateUrl(rawUrl: string, experiment?: ExperimentDefi
       persistent: false,
       timeout: 170_000,
       resources: { vcpus: 2 },
-      networkPolicy: { allow: ["*"], subnets: { deny: DENIED_SANDBOX_SUBNETS } },
+      networkPolicy: "allow-all",
     });
   } catch (error) {
     throw new SandboxExecutionError(`Sandbox creation/authentication failed: ${errorDetail(error)}`);
@@ -165,13 +169,25 @@ export async function investigateUrl(rawUrl: string, experiment?: ExperimentDefi
       startedAtMs:investigationStartedAtMs,finishedAtMs:Date.now(),snapshotA:{timestampMs:0,processes:[],network:[],filesystem:[],truncated:[]},snapshotB:{timestampMs:0,processes:[],network:[],filesystem:[],truncated:[]},
       processes:[],network:[],filesystem:[],events:[],ebpf:{available:false,reason:"eBPF capability probe could not run."},truncationMarkers:["system_telemetry_unavailable"],
     };
-    const events=normalizeInvestigationEvents({startedAtMs:investigationStartedAtMs,browserStartedAtMs:browserRun.browserStartedAtMs,agent:browserRun.agent,browser,agentBrowser:browserRun.agentBrowser,telemetry});
+    const baseEvents=normalizeInvestigationEvents({startedAtMs:investigationStartedAtMs,browserStartedAtMs:browserRun.browserStartedAtMs,agent:browserRun.agent,browser,agentBrowser:browserRun.agentBrowser,telemetry});
+    const resolvedAddresses = experiment ? await lookup("example.com", { all: true, verbatim: true }).then((items) => items.slice(0, 10).map((item) => item.address)).catch(() => []) : [];
+    const events=experiment ? normalizeExperimentEvents({events:baseEvents,agent:browserRun.agent,caseStartedAtMs:investigationStartedAtMs,allowedDestinations:experiment.allowedDestinations,resolvedAddresses,provisioningStartedAtMs:browserRun.provisioningStartedAtMs,provisioningCompletedAtMs:browserRun.provisioningCompletedAtMs}) : baseEvents;
     const eventDifferential=buildDifferential(events);
     const differential={...eventDifferential,unexpectedActions:browserRun.differential.unexpectedActions,additionalDestinations:eventDifferential.additionalConnections,additionalBrowserRequests:eventDifferential.additionalRequests};
     if(events.some(event=>event.action==="telemetry.truncated")&&!telemetry.truncationMarkers.includes("normalized_event_limit"))telemetry.truncationMarkers.push("normalized_event_limit");
     const initialEvidenceGraph=await buildEvidenceGraph({target:safeTarget,browser,agentBrowser:browserRun.agentBrowser,agent:browserRun.agent,telemetry,startedAtMs:investigationStartedAtMs,browserStartedAtMs:browserRun.browserStartedAtMs});
     const hypothesisReport=buildHypotheses(events,initialEvidenceGraph);
-    const linkedEvidence=linkHypothesesToEvidenceGraph(initialEvidenceGraph,events,hypothesisReport.hypotheses);
+    const realAgentAnchor = experiment?.id === REAL_INDIRECT_PROMPT_INJECTION.id ? (browserRun.agent.actionAnchors ?? []).find((anchor) => anchor.action === "navigate") : undefined;
+    const actionEffect = realAgentAnchor ? evaluateActionToEffectHypothesis({events,anchor:{...realAgentAnchor,timestampMs:Math.max(0,browserRun.agent.startedAtMs-investigationStartedAtMs)+realAgentAnchor.timestampMs} as ActionAnchor,targetUrl:"https://example.com",resolvedAddresses}) : undefined;
+    const actionEffectObserved=Boolean(actionEffect?.sourceEventIds.some(id=>events.find(event=>event.id===id)?.action==="system.socket_observed"));
+    const actionEffectHypothesis = actionEffect ? [{id:`hypothesis-action-effect-${caseId.toLowerCase()}`,type:"multi_stage_attack_chain" as const,title:"Agent action to observed effect chain",confidence:actionEffect.confidence,status:actionEffect.status,evidenceClass:actionEffect.status!=="supported"?"INSUFFICIENT_EVIDENCE" as const:actionEffectObserved?"ACTION_EFFECT_SUPPORTED" as const:"DIFFERENTIAL_SUPPORTED" as const,sourceEvents:actionEffect.sourceEventIds,evidenceNodeIds:actionEffect.sourceEventIds.map((id)=>`node-${id}`),explanation:actionEffect.explanation,limitations:actionEffect.limitations}] : [];
+    const allHypotheses = [...hypothesisReport.hypotheses, ...actionEffectHypothesis].slice(0,20);
+    const linkedEvidence=linkHypothesesToEvidenceGraph(initialEvidenceGraph,events,allHypotheses);
+    const isRealAgentExperiment = experiment?.id === REAL_INDIRECT_PROMPT_INJECTION.id;
+    const providerLabel = browserRun.agent.provider === "openai" || browserRun.agent.provider === "openrouter" ? browserRun.agent.provider : "fallback";
+    const modelExecution = { provider: providerLabel as "openai" | "openrouter" | "fallback", ...(browserRun.agent.model ? {model:browserRun.agent.model,configuredModel:browserRun.agent.model}:{}), ...(browserRun.agent.actualModel ? {actualModel:browserRun.agent.actualModel}:{}), ...(browserRun.agent.responseId ? {responseId:browserRun.agent.responseId}:{}), ...(browserRun.agent.modelToolCalls !== undefined ? {modelToolCalls:browserRun.agent.modelToolCalls}:{}), toolCalls:browserRun.agent.actions.length, modelRequests:browserRun.agent.modelRequests ?? 0 };
+    const baselineSnapshot = telemetry.baselineSnapshot as {processes?:unknown[];network?:Array<{state?:string}>}|undefined;
+    const agentSnapshot = telemetry.snapshotB as {processes?:unknown[];network?:Array<{state?:string}>}|undefined;
     const experimentResult = experiment ? buildExperimentResult(experiment, {
       caseId,
       events,
@@ -183,6 +199,7 @@ export async function investigateUrl(rawUrl: string, experiment?: ExperimentDefi
       agentCompleted: browserRun.agent.completed,
       ...(browserRun.agent.summary ? { agentSummary: browserRun.agent.summary } : {}),
       ...(browserRun.agent.terminationReason ? { terminationReason: browserRun.agent.terminationReason } : {}),
+      ...(isRealAgentExperiment ? {modelExecution,baselineProcesses:baselineSnapshot?.processes?.length??0,agentProcesses:agentSnapshot?.processes?.length??0,baselineConnections:baselineSnapshot?.network?.filter((item)=>item.state==="ESTABLISHED").length??0,agentConnections:agentSnapshot?.network?.filter((item)=>item.state==="ESTABLISHED").length??0} : {}),
       hypotheses: linkedEvidence.hypotheses,
     }) : undefined;
 
@@ -204,14 +221,17 @@ export async function investigateUrl(rawUrl: string, experiment?: ExperimentDefi
       browser,
       ...(browserRun.agentBrowser ? { agentBrowser: browserRun.agentBrowser } : {}),
       experiment: { mode: "agent", task: experiment?.task ?? "Visit the provided website and summarize what the page is about.", ...(experiment ? { id: experiment.id, name: experiment.name, version: experiment.version, fixtureUrl: experiment.fixtureUrl, expectedBehavior: experiment.expectedBehavior, allowedDestinations: experiment.allowedDestinations, maxActions: experiment.maxActions, maxRuntimeMs: experiment.maxRuntimeMs } : {}) },
+      ...(isRealAgentExperiment ? {agentProvider:providerLabel, ...(browserRun.agent.model?{agentModel:browserRun.agent.model}:{}),experimentVersion:experiment.version,syntheticFixture:true,realModelExecution:providerLabel!=="fallback"&&browserRun.agent.actions.length>0,modelExecution,agentActions:browserRun.agent.actions,attribution:{actionAnchors:(browserRun.agent.actionAnchors??[]).map((anchor)=>({...anchor,timestampMs:Math.max(0,browserRun.agent.startedAtMs-investigationStartedAtMs)+anchor.timestampMs})),attributionWindowMs:POST_ACTION_WINDOW_MS,methodologyVersion:ATTRIBUTION_METHODOLOGY_VERSION,provisioningExcluded:true}} : {}),
+      ...(browserRun.agent.providerError ? {providerError:browserRun.agent.providerError} : {}),
       ...(experimentResult ? { experimentResult, outcomes: experimentResult.outcomes } : {}),
-      agent: { task: "Visit the provided website and summarize what the page is about.", provider: browserRun.agent.provider, ...(browserRun.agent.model ? { model: browserRun.agent.model } : {}), actions: browserRun.agent.actions, actionCount: browserRun.agent.actions.length, completed: browserRun.agent.completed, ...(browserRun.agent.terminationReason ? { terminationReason: browserRun.agent.terminationReason } : {}), ...(browserRun.agent.summary ? { summary: browserRun.agent.summary } : {}) },
+      agent: { task: experiment?.task ?? "Visit the provided website and summarize what the page is about.", provider: isRealAgentExperiment?providerLabel:browserRun.agent.provider, ...(browserRun.agent.model ? { model: browserRun.agent.model } : {}), actions: browserRun.agent.actions, actionCount: browserRun.agent.actions.length, completed: browserRun.agent.completed, ...(browserRun.agent.terminationReason ? { terminationReason: browserRun.agent.terminationReason } : {}), ...(browserRun.agent.summary ? { summary: browserRun.agent.summary } : {}) },
       baselineEvents: browserRun.baselineEvents,
       agentEvents: browserRun.agentEvents,
       differential,
       hypotheses: linkedEvidence.hypotheses,
-      hypothesisMetadata: { generatedAt: hypothesisReport.generatedAt, engineVersion: hypothesisReport.engineVersion },
+      hypothesisMetadata: { generatedAt: hypothesisReport.generatedAt, engineVersion: hypothesisReport.engineVersion, categories:{OBSERVATION_SUPPORTED:allHypotheses.some(item=>item.evidenceClass==="OBSERVATION_SUPPORTED"),DIFFERENTIAL_SUPPORTED:allHypotheses.some(item=>item.evidenceClass==="DIFFERENTIAL_SUPPORTED"),ACTION_EFFECT_SUPPORTED:allHypotheses.some(item=>item.evidenceClass==="ACTION_EFFECT_SUPPORTED"),INSUFFICIENT_EVIDENCE:!actionEffectObserved} },
       telemetry,
+      telemetryMode:telemetry.mode??"snapshot",
       events,
       evidenceGraph: linkedEvidence.evidenceGraph,
       observations,

@@ -12,7 +12,8 @@
     "probe:sandbox": "tsx scripts/probe-sandbox.ts",
     "sandbox:probe": "tsx scripts/probe-sandbox.ts",
     "test:hypotheses": "node --import tsx --test tests/hypothesis-engine.test.ts",
-    "test:experiment": "node --import tsx --test tests/experiment-runner.test.ts"
+    "test:experiment": "node --import tsx --test",
+    "smoke:openrouter": "tsx scripts/openrouter-smoke.ts"
   },
   "dependencies": {
     "@vercel/sandbox": "^3.5.1",

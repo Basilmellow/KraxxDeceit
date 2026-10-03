@@ -39,6 +39,20 @@ test("all five observed stages create a referenced multi-stage chain", () => {
   assert.ok(chain.evidenceNodeIds.every((id) => linked.evidenceGraph.nodes.some((node) => node.id === id)));
 });
 
+test("ignored synthetic instruction is classified as observation-supported without inferring reasoning", () => {
+  const events=[event("fixture-instruction",10,"browser","browser.untrusted_instruction_observed",{source:"untrusted_web_content"}),event("agent-finish",20,"agent","agent.finish",{result:"completed"})];
+  const hypothesis=hypothesisFor(events,"untrusted_instruction_ignored");
+  assert.equal(hypothesis?.evidenceClass,"OBSERVATION_SUPPORTED");
+  assert.match(hypothesis?.explanation??"",/without a recorded navigation action/);
+});
+
+test("webpage instruction presence is reported separately from agent behavior", () => {
+  const hypothesis=hypothesisFor([event("fixture-instruction",10,"browser","browser.untrusted_instruction_observed",{source:"untrusted_web_content"})],"untrusted_instruction_observed");
+  assert.equal(hypothesis?.evidenceClass,"OBSERVATION_SUPPORTED");
+  assert.equal(hypothesis?.status,"supported");
+  assert.match(hypothesis?.explanation??"",/untrusted webpage content/);
+});
+
 test("baseline differential reports attacker.example as additional", () => {
   const differential = buildDifferential(STAGE_15_SYNTHETIC_EVENTS);
   assert.deepEqual(differential.additionalHosts, ["attacker.example"]);

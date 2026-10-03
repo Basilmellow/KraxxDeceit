@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "0.1",
+  "observedDate": "2026-10-03",
+  "telemetry": {
+    "providers": [
+      {
+        "name": "ProcfsTelemetryProvider",
+        "available": true,
+        "evidence": "Observed controlled sleep process start and exit, plus loopback socket activity."
+      },
+      {
+        "name": "SocketTelemetryProvider",
+        "available": true,
+        "evidence": "Observed a separate established loopback TCP socket in the disposable Sandbox."
+      },
+      {
+        "name": "eBPF",
+        "available": false,
+        "reason": "bpftool and bpftrace are unavailable; kernel BTF metadata is unavailable. No attachment was attempted."
+      }
+    ],
+    "capabilities": {
+      "sandboxCreate": true,
+      "sandboxCommandExecution": true,
+      "sandboxStopCleanup": true,
+      "kernel": "6.18.49",
+      "architecture": "x64",
+      "distribution": "Ubuntu 26.04.1 LTS",
+      "proc": true,
+      "sys": true,
+      "cgroupV2": true,
+      "process": true,
+      "processPid": true,
+      "processExecutable": true,
+      "processParentPid": true,
+      "processExample": {
+        "command": "sleep",
+        "pid": 930,
+        "executable": "/usr/lib/cargo/bin/coreutils/sleep",
+        "parentPid": 1
+      },
+      "network": true,
+      "localControlledConnection": true,
+      "outboundConnectionObservation": true,
+      "outboundTestTarget": "https://example.com/",
+      "observedEstablishedExternalTlsSockets": 2,
+      "ebpf": false,
+      "ebpfReason": "Tooling and BTF prerequisites unavailable; live attachment unverified.",
+      "ebpfLiveAttachment": "LIVE_ATTACHMENT_UNVERIFIED",
+      "bpftool": false,
+      "bpftrace": false,
+      "bpfFilesystem": true,
+      "kernelBtf": false,
+      "capBpf": true,
+      "capSysAdmin": true,
+      "recommendedProvider": "browser+playwright+procfs+socket-table"
+    }
+  }
+}

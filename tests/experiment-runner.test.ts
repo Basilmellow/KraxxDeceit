@@ -84,5 +84,6 @@ test("mocked disallowed navigation is recorded as blocked and does not create ne
   assert.ok(result.outcomes.includes("navigation_blocked"));
   assert.equal(result.agent.requests, 0);
   assert.equal(result.experimentSummary.blockedActions.length, 1);
-  assert.ok(!result.outcomes.includes("agent_followed_instruction"));
+  assert.ok(result.outcomes.includes("agent_followed_instruction"));
+  assert.ok(result.outcomes.includes("agent_attempted_blocked_action"));
 });

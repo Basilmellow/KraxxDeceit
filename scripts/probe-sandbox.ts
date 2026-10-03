@@ -14,7 +14,7 @@ async function main() {
   console.log(`Fallback telemetry: ${report.fallbackTelemetry.available ? "AVAILABLE" : "UNAVAILABLE"}`);
   console.log(`Recommended provider: ${report.recommendedProvider}`);
   console.log(JSON.stringify(report, null, 2));
-  if (!report.sandbox.passed) process.exitCode = 1;
+  if (!report.sandbox.passed || report.probeError) process.exitCode = 1;
 }
 
 void main();

@@ -4,12 +4,12 @@ import type { BrowserObservation, InvestigationCase, NormalizedEvent } from "./c
 import type { AgentRun } from "./agent/browser-agent";
 import type { TelemetryCollection } from "./telemetry/provider";
 
-export const MAX_NORMALIZED_EVENTS = 500;
+export const MAX_NORMALIZED_EVENTS = 2_000;
 export const MAX_GRAPH_NODES = 100;
 export const MAX_GRAPH_EDGES = 250;
 
 type GraphNode = {id:string;type:"URL"|"PAGE"|"AGENT_ACTION"|"BROWSER_REQUEST"|"DNS_EVENT"|"SOCKET"|"PROCESS";label:string;details?:Record<string,string>};
-type GraphEdge = {id:string;sourceId:string;targetId:string;type:"observed_during"|"same_destination"|"same_time_window"|"same_process";confidence:"high"|"medium"|"low";label:string};
+type GraphEdge = {id:string;sourceId:string;targetId:string;type:"observed_during"|"same_destination"|"same_time_window"|"same_process"|"temporally_related"|"associated_process"|"pre_existing"|"post_action_observation"|"supports_action_hypothesis";confidence:"high"|"medium"|"low";label:string};
 
 export function normalizeInvestigationEvents(input:{startedAtMs:number;browserStartedAtMs:number;agent:AgentRun;browser:BrowserObservation;agentBrowser?:BrowserObservation;telemetry?:TelemetryCollection}) {
   const out:NormalizedEvent[]=[{id:"event-investigation-start",timestampMs:0,source:"system",action:"investigation_started",details:{caseStart:new Date(input.startedAtMs).toISOString()}}];
@@ -32,6 +32,7 @@ export function normalizeInvestigationEvents(input:{startedAtMs:number;browserSt
   for(const action of input.agent.actions){const blocked=action.tool==="navigate"&&action.result.status==="rejected"&&action.result.reason==="destination_not_allowed";out.push({id:`agent-${action.id}`,timestampMs:agentOffset+action.timestampMs,source:"agent",action:blocked?"agent.navigation_blocked":`agent.${action.tool}`,details:{phase:"agent",result:String(action.result.status??"recorded"),...(blocked?{reason:"destination_not_allowed"}:{}),...(action.tool==="navigate"&&typeof action.input.url==="string"?{url:action.input.url}:{}),...(action.tool==="finish"&&typeof action.input.summary==="string"?{summary:action.input.summary.slice(0,700)}:{})}})};
   const telemetryOffset=Math.max(0,(input.telemetry?.startedAtMs??input.startedAtMs)-input.startedAtMs);
   if(input.telemetry)for(const event of input.telemetry.events)out.push({id:`system-${event.action}-${event.timestampMs}-${out.length}`,timestampMs:telemetryOffset+event.timestampMs,source:"system",action:event.action,details:{phase:event.timestampMs>=(input.telemetry.agentStartSnapshot?.timestampMs??Number.POSITIVE_INFINITY)?"agent":"baseline",...event.details}});
+  if(input.telemetry?.streamEvents)for(const event of input.telemetry.streamEvents)if(event.source!=="agent")out.push({id:event.id,timestampMs:event.timestampMs,source:event.source,action:event.action,details:{...event.details},phase:event.phase as NormalizedEvent["phase"],trafficScope:event.trafficScope as NormalizedEvent["trafficScope"]});
   out.sort((a,b)=>a.timestampMs-b.timestampMs||a.id.localeCompare(b.id));
   const capped=out.slice(0,MAX_NORMALIZED_EVENTS);
   if(out.length>MAX_NORMALIZED_EVENTS)capped[MAX_NORMALIZED_EVENTS-1]={id:"event-truncated",timestampMs:capped.at(-1)?.timestampMs??0,source:"system",action:"telemetry.truncated",details:{limit:String(MAX_NORMALIZED_EVENTS),omitted:String(out.length-MAX_NORMALIZED_EVENTS)}};
@@ -56,6 +57,12 @@ export async function buildEvidenceGraph(input:{target:string;browser:BrowserObs
   const dnsCache=new Map<string,string[]>();for(const req of requestNodes){if(dnsCache.has(req.host))continue;const normalized=req.host.toLowerCase();if(isIP(normalized)){dnsCache.set(normalized,[normalized]);continue}try{const addresses=await lookup(normalized,{all:true,verbatim:true});dnsCache.set(normalized,addresses.slice(0,10).map(x=>x.address))}catch{dnsCache.set(normalized,[])}}
   for(const req of requestNodes){const addresses=dnsCache.get(req.host.toLowerCase())??[];for(const address of addresses.slice(0,3)){const dnsId=`dns-${req.id}-${address}`;addNode({id:dnsId,type:"DNS_EVENT",label:`${req.host} resolved to ${address}`});addEdge(req.id,dnsId,"same_destination","high","Resolver returned this address for the observed request host");for(const [i,s]of sockets.entries())if(s.destinationPort===req.port&&s.destinationIp===address)addEdge(dnsId,`socket-${i+1}`,"same_destination","high","Resolved address matches observed socket destination")}
     for(const [i,s]of sockets.entries()){if(s.destinationPort===req.port&&addresses.includes(s.destinationIp))continue;const reqTime=browserOffset+req.timestampMs,socketTime=socketTimestampOffset+s.timestampMs;if(s.destinationPort===req.port&&Math.abs(socketTime-reqTime)<5_000)addEdge(req.id,`socket-${i+1}`,"same_time_window","low","Request and socket were observed within 5 seconds")}}
+  for(const event of input.telemetry?.streamEvents??[]){
+    const type:GraphNode["type"]=event.source==="agent"?"AGENT_ACTION":event.action.includes("dns")?"DNS_EVENT":event.action.includes("socket")?"SOCKET":event.action.includes("process")?"PROCESS":event.source==="network"?"BROWSER_REQUEST":"PAGE";
+    const label=event.details.url??event.details.hostname??event.details.destinationIp??event.details.command??event.action;
+    const id=`node-${event.id}`;addNode({id,type,label:safeLabel(label),details:{eventId:event.id,source:event.source,action:event.action,timestampMs:String(event.timestampMs),phase:event.phase??"unknown",trafficScope:event.trafficScope??"unknown",...event.details}});
+  }
+  for(const relationship of input.telemetry?.streamRelationships??[]){addEdge(`node-${relationship.sourceEventId}`,`node-${relationship.targetEventId}`,relationship.type,"medium",relationship.label)}
   const cap=(input.agentBrowser?.requests.length??0)-input.browser.requests.length;
   const truncated=nodes.length>=MAX_GRAPH_NODES||edgeTruncated||uniqReqs.length>45||cap>MAX_NORMALIZED_EVENTS;
   return {nodes,edges,truncated};

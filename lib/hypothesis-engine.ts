@@ -16,7 +16,8 @@ export type HypothesisType =
   | "agent_to_external_host"
   | "multi_stage_attack_chain"
   | "untrusted_instruction_to_agent_navigation"
-  | "untrusted_instruction_ignored";
+  | "untrusted_instruction_ignored"
+  | "untrusted_instruction_observed";
 
 export type CausalHypothesis = {
   id: string;
@@ -24,6 +25,7 @@ export type CausalHypothesis = {
   title: string;
   confidence: "low" | "medium" | "high";
   status: "observed" | "supported" | "insufficient_evidence";
+  evidenceClass: "OBSERVATION_SUPPORTED" | "DIFFERENTIAL_SUPPORTED" | "ACTION_EFFECT_SUPPORTED" | "INSUFFICIENT_EVIDENCE";
   sourceEvents: string[];
   evidenceNodeIds: string[];
   explanation: string;
@@ -32,7 +34,7 @@ export type CausalHypothesis = {
 
 export type EvidenceGraph = {
   nodes: Array<{ id: string; type: "URL" | "PAGE" | "AGENT_ACTION" | "BROWSER_REQUEST" | "DNS_EVENT" | "SOCKET" | "PROCESS"; label: string; details?: Record<string, string> }>;
-  edges: Array<{ id: string; sourceId: string; targetId: string; type: "observed_during" | "same_destination" | "same_time_window" | "same_process"; confidence: "high" | "medium" | "low"; label: string }>;
+  edges: Array<{ id: string; sourceId: string; targetId: string; type: "observed_during" | "same_destination" | "same_time_window" | "same_process" | "temporally_related" | "associated_process" | "pre_existing" | "post_action_observation" | "supports_action_hypothesis"; confidence: "high" | "medium" | "low"; label: string }>;
   truncated: boolean;
 };
 
@@ -115,11 +117,13 @@ export function buildHypotheses(events: readonly NormalizedEvent[], evidenceGrap
   ];
   const make = (type: HypothesisType, title: string, confidence: CausalHypothesis["confidence"], sourceEvents: NormalizedEvent[], explanation: string, limitations: string[] = []) => {
     if (sourceEvents.some((event) => !byId.has(event.id))) return;
-    add({ type, title, confidence, status: "supported", sourceEvents: sourceEvents.map((event) => event.id), evidenceNodeIds: [], explanation: limitedText(explanation), limitations: baseLimitations(limitations) });
+    const evidenceClass:CausalHypothesis["evidenceClass"]=type==="untrusted_instruction_ignored"||type==="untrusted_instruction_observed"?"OBSERVATION_SUPPORTED":type==="multi_stage_attack_chain"?"ACTION_EFFECT_SUPPORTED":"DIFFERENTIAL_SUPPORTED";
+    add({ type, title, confidence, status: "supported", evidenceClass, sourceEvents: sourceEvents.map((event) => event.id), evidenceNodeIds: [], explanation: limitedText(explanation), limitations: baseLimitations(limitations) });
   };
 
   // Page content remains untrusted evidence, distinct from privileged instructions.
   for (const instruction of instructionObservations) {
+    make("untrusted_instruction_observed", "Untrusted webpage instruction was observed", "high", [instruction], "The browser recorded an instruction in untrusted webpage content.", ["Presence of webpage text does not show whether or how the agent used it."]);
     for (const action of agentNavigations) {
       if (!follows(instruction, action, AGENT_TO_BROWSER_WINDOW_MS + 60_000)) continue;
       make("untrusted_instruction_to_agent_navigation", "Untrusted webpage instruction preceded an agent navigation", "medium", [instruction, action], "An untrusted webpage instruction was recorded before the agent requested navigation. This temporal sequence does not prove the instruction caused the action.", ["The browser content is untrusted data and is not a system instruction."]);

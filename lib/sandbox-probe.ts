@@ -1,5 +1,5 @@
 import { Sandbox } from "@vercel/sandbox";
-import { ProcfsTelemetryProvider } from "./telemetry/provider";
+import { ProcfsTelemetryProvider, SocketTelemetryProvider } from "./telemetry/provider";
 import { DENIED_SANDBOX_SUBNETS } from "./url-safety";
 
 const HEALTH_CHECK = `console.log("KRAXX_SANDBOX_OK")`;
@@ -43,8 +43,8 @@ export type SandboxProbeReport = {
   processTelemetry: { supported: boolean; details: string };
   networkTelemetry: { supported: boolean; details: string };
   ebpf: { available: boolean; bpftool: boolean; bpftrace: boolean; bpfFilesystem: boolean; capabilities: string[]; details: string; attachmentTested: false };
-  fallbackTelemetry: { available: boolean; details: string };
-  preferredProvider: "eBPF";
+  fallbackTelemetry: { available: boolean; procfsProvider: { supported: boolean; details: string }; socketProvider: { supported: boolean; details: string }; details: string };
+  preferredProvider: "eBPF" | "procfs/socket" | "unavailable";
   recommendedProvider: string;
 };
 
@@ -72,6 +72,7 @@ function errorDetail(error: unknown): string {
 export async function runSandboxProbe(): Promise<SandboxProbeReport> {
   let sandbox: Sandbox | undefined;
   let provider: ProcfsTelemetryProvider | undefined;
+  let socketProvider: SocketTelemetryProvider | undefined;
   const report: SandboxProbeReport = {
     sandbox: { passed: false, created: false, healthCheck: false, stopped: false, details: "Sandbox creation has not completed." },
     kernel: "Not observed", architecture: "Not observed", distribution: [], interfaces: {}, cgroup: [],
@@ -79,8 +80,8 @@ export async function runSandboxProbe(): Promise<SandboxProbeReport> {
     processTelemetry: { supported: false, details: "Not observed" },
     networkTelemetry: { supported: false, details: "Not observed" },
     ebpf: { available: false, bpftool: false, bpftrace: false, bpfFilesystem: false, capabilities: [], details: "Not observed", attachmentTested: false },
-    fallbackTelemetry: { available: false, details: "Not observed" },
-    preferredProvider: "eBPF", recommendedProvider: "Unavailable until a live probe completes",
+    fallbackTelemetry: { available: false, procfsProvider: { supported: false, details: "Not observed" }, socketProvider: { supported: false, details: "Not observed" }, details: "Not observed" },
+    preferredProvider: "unavailable", recommendedProvider: "Unavailable until a live probe completes",
   };
   try {
     sandbox = await Sandbox.create({
@@ -144,6 +145,35 @@ export async function runSandboxProbe(): Promise<SandboxProbeReport> {
         : `Local TCP test ${socket.exitCode === 0 ? "ran" : `failed (exit ${socket.exitCode})`}, but the matching ESTABLISHED socket was not captured. ${socketOutput.slice(0, 300)}`,
     };
 
+    const procfsSupported = collection.providers.some((item) => item.name === "procfs" && item.available) && report.processTelemetry.supported;
+    report.fallbackTelemetry = {
+      available: false,
+      procfsProvider: { supported: procfsSupported, details: report.processTelemetry.details },
+      socketProvider: { supported: false, details: "SocketTelemetryProvider controlled activity has not yet completed." },
+      details: "ProcfsTelemetryProvider activity was observed; SocketTelemetryProvider verification is in progress.",
+    };
+    socketProvider = new SocketTelemetryProvider(sandbox);
+    await socketProvider.start();
+    const socketRepeat = await sandbox.runCommand({ cmd: "node", args: ["-e", SOCKET_TEST], timeoutMs: 8_000 });
+    const socketRepeatOutput = await resultText(socketRepeat);
+    const socketRepeatPort = Number(socketRepeatOutput.match(/KRAXX_SOCKET_TEST:(\d+)/)?.[1]);
+    await socketProvider.snapshot();
+    await socketProvider.stop();
+    const socketCollection = await socketProvider.collect();
+    const socketSeen = socketCollection.network.some((item) => item.protocol === "tcp" && item.state === "ESTABLISHED" &&
+      item.localAddress === "127.0.0.1" && item.destinationIp === "127.0.0.1" && (!socketRepeatPort || item.localPort === socketRepeatPort || item.destinationPort === socketRepeatPort));
+    report.fallbackTelemetry = {
+      available: procfsSupported && Boolean(socketRepeatPort && socketRepeat.exitCode === 0 && socketSeen),
+      procfsProvider: { supported: procfsSupported, details: report.processTelemetry.details },
+      socketProvider: {
+        supported: Boolean(socketRepeatPort && socketRepeat.exitCode === 0 && socketSeen),
+        details: socketRepeatPort && socketRepeat.exitCode === 0 && socketSeen
+          ? `SocketTelemetryProvider observed an ESTABLISHED loopback TCP socket on test port ${socketRepeatPort}.`
+          : `SocketTelemetryProvider did not capture the controlled loopback socket. ${socketRepeatOutput.slice(0, 300)}`,
+      },
+      details: "ProcfsTelemetryProvider observed controlled sleep activity; SocketTelemetryProvider observed a second controlled loopback connection.",
+    };
+
     const ebpf = collection.ebpf;
     const capabilities = [ebpf.capability?.bpf ? "CAP_BPF" : null, ebpf.capability?.sysAdmin ? "CAP_SYS_ADMIN" : null].filter((x): x is string => Boolean(x));
     report.ebpf = {
@@ -155,19 +185,27 @@ export async function runSandboxProbe(): Promise<SandboxProbeReport> {
       details: ebpf.reason ?? "Capability checks passed; no BPF program or attachment was attempted.",
       attachmentTested: false,
     };
-    report.fallbackTelemetry = {
-      available: collection.providers.some((item) => item.name === "procfs" && item.available) && collection.providers.some((item) => item.name === "socket-table" && item.available),
-      details: "The configured procfs and socket-table sampler ran in this sandbox.",
-    };
+    if (report.fallbackTelemetry.details === "Not observed") {
+      report.fallbackTelemetry = {
+        available: collection.providers.some((item) => item.name === "procfs" && item.available) && collection.providers.some((item) => item.name === "socket-table" && item.available),
+        procfsProvider: { supported: report.processTelemetry.supported, details: report.processTelemetry.details },
+        socketProvider: { supported: report.networkTelemetry.supported, details: report.networkTelemetry.details },
+        details: "The configured procfs and socket-table sampler ran in this sandbox.",
+      };
+    }
+    report.preferredProvider = report.ebpf.available ? "eBPF" : report.fallbackTelemetry.available ? "procfs/socket" : "unavailable";
     report.recommendedProvider = report.ebpf.available ? "eBPF (capability probe only; attachment not tested)" : report.fallbackTelemetry.available ? "procfs/socket" : "Unavailable";
   } catch (error) {
     report.probeError = errorDetail(error);
     report.sandbox.passed = false;
     report.sandbox.details = report.probeError;
+    report.fallbackTelemetry.details = `Probe stopped before all requested telemetry observations completed: ${report.probeError}`;
   } finally {
     try {
       if (provider) await Promise.race([provider.stop(), new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Provider stop timed out.")), 5_000))]);
     } catch (error) { report.fallbackTelemetry.details = `Provider cleanup failed: ${redact(String(error))}`; }
+    try { if (socketProvider) await socketProvider.stop(); }
+    catch (error) { report.fallbackTelemetry.details += ` Socket provider cleanup failed: ${redact(String(error))}`; }
     if (sandbox) {
       try {
         await sandbox.stop({ signal: AbortSignal.timeout(8_000) });
