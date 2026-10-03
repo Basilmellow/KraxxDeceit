@@ -1,0 +1,15 @@
+node_modules/
+.next/
+out/
+.env
+.env.local
+.env.*
+!.env.example
+.vercel
+*.log
+.DS_Store
+
+# local case and CLI output
+cases/
+.codex-localappdata/
+*.tsbuildinfo

@@ -1,0 +1,6 @@
+{
+  "attackCategory": "indirect_prompt_injection",
+  "severity": "synthetic",
+  "requiresRealSecrets": false,
+  "safe": true
+}
