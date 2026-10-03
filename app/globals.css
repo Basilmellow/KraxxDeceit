@@ -384,3 +384,10 @@ a:focus-visible, button:focus-visible, select:focus-visible, summary:focus-visib
  .map-traces path { stroke-dashoffset: 0; }.method-steps::before { transform: scaleY(1); transition: none; }
 }
 .evidence-map-viewport { min-width: 0; width: 100%; }
+
+.demo-shell { max-width: 1100px; margin: 0 auto; padding: 48px 24px; }
+.demo-shell > a { display: inline-block; margin-bottom: 24px; }
+.demo-shell .panel { margin: 24px 0; }
+.demo-shell .primary-cta { margin-top: 20px; border: 0; cursor: pointer; }
+.demo-shell button:disabled { opacity: .6; cursor: wait; }
+.demo-shell pre { max-height: 640px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }

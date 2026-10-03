@@ -1,3 +1,4 @@
+import { internalRoutesEnabled } from "@/lib/production-policy";
 import { timingSafeEqual } from "node:crypto";
 import { runSandboxProbe } from "@/lib/sandbox-probe";
 
@@ -18,6 +19,7 @@ function hidden() {
 }
 
 export async function POST(request: Request) {
+  if (!internalRoutesEnabled()) return hidden();
   if (process.env.KRAXX_INTERNAL_PROBE_ENABLED !== "true" || !authorized(request)) return hidden();
 
   try {

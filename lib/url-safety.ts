@@ -8,7 +8,7 @@ for (const [range, prefix, type] of [
   ["192.0.0.0", 24, "ipv4"], ["192.0.2.0", 24, "ipv4"], ["192.168.0.0", 16, "ipv4"],
   ["198.18.0.0", 15, "ipv4"], ["198.51.100.0", 24, "ipv4"], ["203.0.113.0", 24, "ipv4"],
   ["224.0.0.0", 4, "ipv4"], ["240.0.0.0", 4, "ipv4"],
-  ["::", 128, "ipv6"], ["::1", 128, "ipv6"],
+  ["::", 96, "ipv6"], ["2001::", 32, "ipv6"], ["::1", 128, "ipv6"],
   ["64:ff9b::", 96, "ipv6"], ["100::", 64, "ipv6"], ["2001:db8::", 32, "ipv6"],
   ["fc00::", 7, "ipv6"], ["fe80::", 10, "ipv6"], ["ff00::", 8, "ipv6"],
 ] as const) {
@@ -34,12 +34,18 @@ export function isDevelopmentFixtureUrl(rawUrl: string) {
   } catch { return false; }
 }
 
-function isForbiddenAddress(address: string) {
+export function isForbiddenAddress(address: string) {
   const family = isIP(address);
+  if (family === 6 && address.toLowerCase().startsWith("::ffff:")) {
+    const tail=address.slice(7);
+    if (isIP(tail)===4) return forbiddenAddresses.check(tail,"ipv4");
+    const parts=tail.split(":");
+    if(parts.length===2) { const n=(parseInt(parts[0],16)*65536)+parseInt(parts[1],16); return forbiddenAddresses.check([n>>>24,(n>>>16)&255,(n>>>8)&255,n&255].join("."),"ipv4"); }
+  }
   return family === 0 || forbiddenAddresses.check(address, family === 4 ? "ipv4" : "ipv6");
 }
 
-export async function validatePublicHttpUrl(rawUrl: string): Promise<URL> {
+export async function validatePublicHttpUrl(rawUrl: string, resolveAddresses = (host: string) => lookup(host, { all: true, verbatim: true })): Promise<URL> {
   let url: URL;
   try {
     url = new URL(rawUrl);
@@ -52,6 +58,7 @@ export async function validatePublicHttpUrl(rawUrl: string): Promise<URL> {
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new UnsafeTargetError("Only public HTTP and HTTPS URLs can be investigated.");
   }
+  if (url.port && !["80", "443"].includes(url.port)) throw new UnsafeTargetError("Only standard HTTP(S) ports are supported.");
   if (url.username || url.password) {
     throw new UnsafeTargetError("URLs containing embedded credentials are not supported.");
   }
@@ -67,7 +74,7 @@ export async function validatePublicHttpUrl(rawUrl: string): Promise<URL> {
 
   let addresses: Array<{ address: string }>;
   try {
-    addresses = await lookup(hostname, { all: true, verbatim: true });
+    addresses = await resolveAddresses(hostname);
   } catch {
     throw new UnsafeTargetError("The target hostname could not be resolved to a public address.");
   }
@@ -81,4 +88,5 @@ export const DENIED_SANDBOX_SUBNETS = [
   "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16",
   "172.16.0.0/12", "192.0.0.0/24", "192.0.2.0/24", "192.168.0.0/16", "198.18.0.0/15",
   "198.51.100.0/24", "203.0.113.0/24", "224.0.0.0/4", "240.0.0.0/4",
+  "::/96", "2001::/32", "::1/128", "::ffff:0:0/96", "64:ff9b::/96", "100::/64", "2001:db8::/32", "fc00::/7", "fe80::/10", "ff00::/8",
 ];

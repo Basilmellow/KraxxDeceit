@@ -1,3 +1,4 @@
+import { internalRoutesEnabled } from "@/lib/production-policy";
 import { NextResponse } from "next/server";
 import { runEndToEndChain } from "@/lib/end-to-end-chain";
 import { z } from "zod";
@@ -8,7 +9,7 @@ export const maxDuration = 180;
 const RequestSchema = z.object({ mode: z.enum(["ignore", "follow-safe", "blocked"]) });
 
 export async function POST(request: Request) {
-  if (process.env.NODE_ENV !== "development") return NextResponse.json({ error: "Not found." }, { status: 404 });
+  if (!internalRoutesEnabled()) return NextResponse.json({ error: "Not found." }, { status: 404 });
   const parsed = RequestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Choose a fixed controlled experiment mode." }, { status: 400 });
   try { return NextResponse.json(await runEndToEndChain(parsed.data.mode)); }

@@ -136,7 +136,7 @@ export default function HomePage() {
     <MotionSurface>
       <nav className="nav" aria-label="Main navigation">
         <a className="brand" href="#top" aria-label="KraxxDeceit home"><img className="brand-mark" src="/kraxxdeceit-mark.png" alt="" /><span className="brand-wordmark"><span>KRAXX</span><span>DECEIT</span></span></a>
-        <div id="mobile-navigation" className={`nav-links${menuOpen ? " is-open" : ""}`}><a onClick={() => setMenuOpen(false)} href="#research">Research</a><a onClick={() => setMenuOpen(false)} href="#how-it-works">How it works</a><a onClick={() => setMenuOpen(false)} href="#cases">Cases</a><a onClick={() => setMenuOpen(false)} href="#documentation">Documentation</a></div>
+        <div id="mobile-navigation" className={`nav-links${menuOpen ? " is-open" : ""}`}><a onClick={() => setMenuOpen(false)} href="#research">Research</a><a onClick={() => setMenuOpen(false)} href="#how-it-works">How it works</a><a onClick={() => setMenuOpen(false)} href="#cases">Cases</a><a onClick={() => setMenuOpen(false)} href="#documentation">Documentation</a><a onClick={() => setMenuOpen(false)} href="/demo">Controlled demo</a></div>
         <div className="nav-actions"><a className="github-link" href="https://github.com/Basilmellow/KraxxDeceit" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a><a className="nav-cta" href="#investigation-console">Run investigation <span aria-hidden="true">↗</span></a></div>
         <button className={`menu-toggle${menuOpen ? " is-open" : ""}`} type="button" aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"} aria-expanded={menuOpen} aria-controls="mobile-navigation" onClick={() => setMenuOpen((open) => !open)}><span/><span/></button>
       </nav>

@@ -1,3 +1,4 @@
+import { DEMO_URL, LIMITS, PROVISIONING_POLICY } from "./production-policy";
 import { Sandbox } from "@vercel/sandbox";
 import { randomUUID } from "node:crypto";
 import { InvestigationCaseSchema, type InvestigationCase } from "./case-schema";
@@ -75,11 +76,14 @@ function collectIndicators(urls: string[]) {
   return indicators;
 }
 
-export async function investigateUrl(rawUrl: string, experiment?: ExperimentDefinition): Promise<InvestigationCase> {
+export async function investigateUrl(rawUrl: string, experiment?: ExperimentDefinition, options: { signal?: AbortSignal; demo?: boolean; onSandboxCreated?: () => void } = {}): Promise<InvestigationCase> {
   // Validate syntax and DNS before creating any remote compute. Sandbox subnet
   // denies and the browser's request route repeat this check after redirects.
-  const target = await validatePublicHttpUrl(rawUrl);
-  if (experiment && (process.env.NODE_ENV !== "development" || target.toString() !== experiment.fixtureUrl || ![BASIC_INDIRECT_PROMPT_INJECTION.id, REAL_INDIRECT_PROMPT_INJECTION.id].includes(experiment.id))) {
+  const controlledDemo = options.demo === true && rawUrl === DEMO_URL && experiment?.fixtureUrl === DEMO_URL && experiment.id === BASIC_INDIRECT_PROMPT_INJECTION.id;
+  if (options.demo && !controlledDemo) throw new Error("Invalid controlled demo.");
+  const target = controlledDemo ? new URL(DEMO_URL) : await validatePublicHttpUrl(rawUrl);
+  options.signal?.throwIfAborted();
+  if (experiment && !controlledDemo && (process.env.NODE_ENV !== "development" || target.toString() !== experiment.fixtureUrl || ![BASIC_INDIRECT_PROMPT_INJECTION.id, REAL_INDIRECT_PROMPT_INJECTION.id].includes(experiment.id))) {
     throw new Error("This fixed experiment is available only in the local development environment.");
   }
   const safeTarget = publicUrl(target.toString());
@@ -98,16 +102,22 @@ export async function investigateUrl(rawUrl: string, experiment?: ExperimentDefi
     sandbox = await Sandbox.create({
       name: `kraxxdeceit-${caseId.toLowerCase()}`,
       persistent: false,
-      timeout: 170_000,
+      timeout: LIMITS.sandboxMs,
+      signal: options.signal,
       resources: { vcpus: 2 },
-      networkPolicy: "allow-all",
+      networkPolicy: PROVISIONING_POLICY,
     });
   } catch (error) {
     throw new SandboxExecutionError(`Sandbox creation/authentication failed: ${errorDetail(error)}`);
   }
 
+  options.onSandboxCreated?.();
+  const stopOnAbort = () => { void sandbox.stop().catch(() => undefined); };
+  options.signal?.addEventListener("abort", stopOnAbort, { once: true });
+  if (options.signal?.aborted) stopOnAbort();
   const createdAt = new Date().toISOString();
   try {
+    options.signal?.throwIfAborted();
     const healthCheck = await sandbox.runCommand({ cmd: "node", args: ["-e", "console.log('KRAXX_SANDBOX_OK')"] });
     const healthStdout = await healthCheck.stdout();
     const healthStderr = await healthCheck.stderr();
@@ -115,7 +125,8 @@ export async function investigateUrl(rawUrl: string, experiment?: ExperimentDefi
       throw new SandboxExecutionError(`Sandbox health check failed (exit code ${healthCheck.exitCode}). stderr: ${healthStderr.slice(0, 1000) || "<empty>"}`);
     }
 
-    const browserRun = await runBrowserInvestigation(sandbox, target.toString(), experiment ? { allowedDestinations: experiment.allowedDestinations, task: experiment.task } : undefined);
+    const browserRun = await runBrowserInvestigation(sandbox, target.toString(), experiment ? { allowedDestinations: experiment.allowedDestinations, task: experiment.task, demo: controlledDemo } : undefined);
+    options.signal?.throwIfAborted();
     const investigationStartedAtMs = Date.parse(createdAt);
     const browser = browserRun.browser;
     const finalUrl = browserRun.agentBrowser?.finalUrl ?? browser.finalUrl;
@@ -205,6 +216,7 @@ export async function investigateUrl(rawUrl: string, experiment?: ExperimentDefi
 
     return InvestigationCaseSchema.parse({
       schemaVersion: "0.1",
+      modelExecution,
       caseId,
       createdAt,
       target: { submittedUrl: safeTarget, ...(finalUrl ? { finalUrl } : {}) },
@@ -239,6 +251,7 @@ export async function investigateUrl(rawUrl: string, experiment?: ExperimentDefi
       raw: { stdout: browserRun.stdout, stderr: browserRun.stderr },
     });
   } finally {
+    options.signal?.removeEventListener("abort", stopOnAbort);
     await sandbox.stop().catch(() => undefined);
   }
 }

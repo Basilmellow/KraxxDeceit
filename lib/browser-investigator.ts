@@ -1,3 +1,7 @@
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
+import { validatePublicHttpUrl } from "./url-safety";
+import { DEMO_URL, investigationPolicy } from "./production-policy";
 import type { Sandbox } from "@vercel/sandbox";
 import { BrowserObservationSchema, type BrowserObservation } from "./case-schema";
 import { runBrowserAgent, type AgentRun } from "./agent/browser-agent";
@@ -57,7 +61,7 @@ for (const [subnet, prefix, type] of [
   ['192.0.0.0',24,'ipv4'], ['192.0.2.0',24,'ipv4'], ['192.168.0.0',16,'ipv4'],
   ['198.18.0.0',15,'ipv4'], ['198.51.100.0',24,'ipv4'], ['203.0.113.0',24,'ipv4'],
   ['224.0.0.0',4,'ipv4'], ['240.0.0.0',4,'ipv4'],
-  ['::',128,'ipv6'], ['::1',128,'ipv6'],
+  ['::',96,'ipv6'], ['2001::',32,'ipv6'], ['::1',128,'ipv6'],
   ['64:ff9b::',96,'ipv6'], ['100::',64,'ipv6'], ['2001:db8::',32,'ipv6'],
   ['fc00::',7,'ipv6'], ['fe80::',10,'ipv6'], ['ff00::',8,'ipv6'],
 ]) forbidden.addSubnet(subnet, prefix, type);
@@ -95,6 +99,8 @@ async function assertSafeRequest(value) {
   let url;
   try { url = new URL(value); } catch { throw new Error('invalid URL'); }
   if (!['http:', 'https:'].includes(url.protocol)) throw new Error('non-HTTP(S) request blocked');
+  if (url.username || url.password) throw new Error('embedded credentials blocked');
+  if (url.port && !['80', '443'].includes(url.port)) throw new Error('nonstandard port blocked');
   const host = url.hostname.replace(/^\[|\]$/g, '');
   if (blockedHost(host)) throw new Error('local or private target blocked');
   if (net.isIP(host) !== 0) return;
@@ -187,6 +193,7 @@ async function main() {
     const requestUrl = route.request().url();
     try {
       const fixture = new URL(requestUrl);
+      if (process.argv[3] === 'demo-enabled' && requestUrl === ${JSON.stringify(DEMO_URL)} && route.request().resourceType() === 'document') { await route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: ${JSON.stringify(FIXTURE_HTML)} }); return; }
       if (process.argv[3] === 'fixture-enabled' && fixture.origin === 'http://localhost:3000' && route.request().resourceType() === 'document') {
         if (fixture.pathname === '/research-fixture/prompt-injection.html') { await route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: ${JSON.stringify(FIXTURE_HTML)} }); return; }
         if (fixture.pathname === '/research-fixture/simple.html') { await route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: ${JSON.stringify(SIMPLE_FIXTURE_HTML)} }); return; }
@@ -194,7 +201,7 @@ async function main() {
       }
     } catch {}
     try {
-      if (process.argv[4] === 'experiment-example.com' && new URL(requestUrl).hostname.toLowerCase().replace(/\.$/, '') !== 'example.com') throw new Error('destination_not_allowed');
+      if (allowedHosts.size && !allowedHosts.has(new URL(requestUrl).hostname.toLowerCase().replace(/\.$/, '').replace(/^\[|\]$/g, ''))) throw new Error('destination_not_allowed');
       await assertSafeRequest(requestUrl); await route.continue();
     }
     catch (error) { await route.abort('blockedbyclient').catch(() => {}); const reason = error.message === 'destination_not_allowed' ? error.message : 'url_safety_policy'; addPageEvent('request_blocked', route.request().url(), reason); }
@@ -364,7 +371,7 @@ main().catch((error) => {
 async function runBrowserInvestigationInternal(
   sandbox: Sandbox,
   url: string,
-  experimentPolicy?: { allowedDestinations: string[]; task?: string },
+  experimentPolicy?: { allowedDestinations: string[]; task?: string; demo?: boolean },
 ): Promise<{ browser: BrowserObservation; agentBrowser?: BrowserObservation; agent: AgentRun; baselineEvents: Array<{type:string;url?:string;detail?:string;timestampMs:number}>; agentEvents: Array<{type:string;url?:string;detail?:string;timestampMs:number}>; differential: {additionalNavigations:string[];additionalRequests:string[];additionalHosts:string[];unexpectedActions:string[]}; telemetry?:TelemetryCollection; browserStartedAtMs:number; provisioningStartedAtMs?:number; provisioningCompletedAtMs?:number; stdout: string; stderr: string; launchFailed: boolean }> {
   const provisioningStartedAtMs=Date.now();
   const providerConfig = createAgentProvider();
@@ -397,7 +404,16 @@ async function runBrowserInvestigationInternal(
     };
   }
 
-  if (experimentPolicy) await sandbox.updateNetworkPolicy({ allow: experimentPolicy.allowedDestinations, subnets: { deny: DENIED_SANDBOX_SUBNETS } });
+  const targetHost = new URL(url).hostname.replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  const allowedDestinations = experimentPolicy?.allowedDestinations ?? [targetHost];
+  const policy = investigationPolicy(targetHost, allowedDestinations);
+  // Plain HTTP and literal IP targets need explicit validated address rules.
+  if (!experimentPolicy && !isDevelopmentFixtureUrl(url) && (new URL(url).protocol === "http:" || isIP(targetHost))) {
+    await validatePublicHttpUrl(url);
+    const addresses = isIP(targetHost) ? [{address:targetHost}] : await lookup(targetHost,{all:true,verbatim:true});
+    for(const {address} of addresses) await validatePublicHttpUrl(`http://${isIP(address) === 6 ? `[${address}]` : address}`);
+    await sandbox.update({networkPolicy:{...policy,subnets:{...policy.subnets,allow:addresses.map(({address})=>`${address}/${isIP(address)===6?128:32}`)}}});
+  } else await sandbox.update({ networkPolicy: policy });
   const provisioningCompletedAtMs=Date.now();
 
   await sandbox.writeFiles([{ path: `${SANDBOX_ROOT}/runner.cjs`, content: BROWSER_RUNNER }]);
@@ -410,7 +426,7 @@ async function runBrowserInvestigationInternal(
   await sandbox.runCommand({ cmd: "node", args: ["-e", `const fs=require('node:fs');for(const p of ${JSON.stringify(streamPaths)})try{fs.unlinkSync(p)}catch{}`] }).catch(() => undefined);
   const runner = await sandbox.runCommand({
     cmd: "env",
-    args: [`NODE_PATH=${SANDBOX_ROOT}/node_modules`, "node", `${SANDBOX_ROOT}/runner.cjs`, url, ...(fixtureEnabled ? ["fixture-enabled"] : []), ...(experimentPolicy ? ["experiment-example.com", experimentPolicy.allowedDestinations.join(",")] : [])],
+    args: [`NODE_PATH=${SANDBOX_ROOT}/node_modules`, "node", `${SANDBOX_ROOT}/runner.cjs`, url, experimentPolicy?.demo ? "demo-enabled" : fixtureEnabled ? "fixture-enabled" : "fixture-disabled", "constrained-target", allowedDestinations.join(",")],
     detached: true,
     timeoutMs: 120_000,
   });
@@ -454,7 +470,7 @@ async function runBrowserInvestigationInternal(
     const agentLoopStartedAtMs = Date.now();
     telemetrySession = new TelemetrySession({
       ...(telemetryAvailable ? { snapshot: () => telemetryProvider.snapshot() } : {}),
-      allowedHosts: experimentPolicy?.allowedDestinations ?? [],
+      allowedHosts: allowedDestinations,
       caseStartedAtMs: agentLoopStartedAtMs,
       readBrowserEvents: async () => {
         const bytes = await sandbox.readFileToBuffer({ path: `${SANDBOX_ROOT}/browser-stream-events.jsonl` }).catch(() => null);
@@ -546,7 +562,7 @@ async function runBrowserInvestigationInternal(
 
 type BrowserInvestigationRun = Awaited<ReturnType<typeof runBrowserInvestigationInternal>>;
 
-export async function runBrowserInvestigation(sandbox: Sandbox, url: string, experimentPolicy?: { allowedDestinations: string[]; task?: string }):Promise<BrowserInvestigationRun> {
+export async function runBrowserInvestigation(sandbox: Sandbox, url: string, experimentPolicy?: { allowedDestinations: string[]; task?: string; demo?: boolean }):Promise<BrowserInvestigationRun> {
   try {
     return await runBrowserInvestigationInternal(sandbox, url, experimentPolicy);
   } catch (error) {

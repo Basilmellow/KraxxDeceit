@@ -1,3 +1,4 @@
+import { safeCase } from "../production-policy";
 import { z } from "zod";
 
 const EmptyInputSchema = z.object({}).strict();
@@ -47,7 +48,7 @@ export class OpenAIResponsesApiError extends AgentProviderApiError {
 
 function sanitizedText(value: unknown, apiKey: string): string | undefined {
   if (typeof value !== "string") return undefined;
-  let safe = value;
+  let safe = safeCase(value);
   if (apiKey) safe = safe.split(apiKey).join("[redacted]");
   safe = safe
     .replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer [redacted]")
