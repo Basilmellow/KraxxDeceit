@@ -97,7 +97,7 @@ test('cross-origin requests and oversized bodies are rejected before execution',
   try {const request=req();request.headers.set('origin','https://untrusted.example');assert.equal((await publicInvestigation(request,true,deps)).status,403);await assert.rejects(readBody(req({data:'x'.repeat(5000)})),{status:413});}finally{restore();}
 });
 test('body reading respects cancellation',async()=>{const controller=new AbortController();controller.abort();await assert.rejects(readBody(req(),controller.signal),{status:504});});
-test('health exposes only liveness and version',async()=>{const response=GET();assert.equal(response.status,200);assert.deepEqual(await response.json(),{status:'ok',version:'1.0.0'});assert.equal(response.headers.get('cache-control'),'no-store');});
+test('health exposes only liveness and version',async()=>{const response=GET();assert.equal(response.status,200);assert.deepEqual(await response.json(),{status:'ok',version:'2.0.0'});assert.equal(response.headers.get('cache-control'),'no-store');});
 test('engine uses disposable bounded sandbox and stops after failed health gate',async()=>{
   const restore=env({NODE_ENV:'development',VERCEL_OIDC_TOKEN:'FAKE-OIDC-TEST-ONLY'});const original=Sandbox.create;let stopped=false;
   Sandbox.create=(async(options)=>{assert.equal(options?.persistent,false);assert.equal(options?.timeout,LIMITS.sandboxMs);assert.deepEqual(options?.networkPolicy,investigationPolicy('8.8.8.8'));assert.equal(options?.image,VERIFIED_SANDBOX_IMAGE);return {runCommand:async()=>({exitCode:1,stdout:async()=>'',stderr:async()=>''}),stop:async()=>{stopped=true;}} as unknown as Sandbox;}) as typeof Sandbox.create;

@@ -37,8 +37,8 @@ The archive records an uncommitted source snapshot and makes no Git publication 
 
 ## Rollback and incident checks
 
-Known rollback before v1: v0.9.1 `dpl_2psdk1rBPK48ED6UyVvSXGdwThh3`.
-Use `vercel rollback dpl_2psdk1rBPK48ED6UyVvSXGdwThh3 --yes
+Known rollback for v2.0: v1.0.0 `dpl_HPkgmSNbyKJNNUuXYMin2qEA33Ga`.
+Use `vercel rollback dpl_HPkgmSNbyKJNNUuXYMin2qEA33Ga --yes
 --scope basil-mellows-projects` when reverting an application regression.
 Rollback does not repair an external model/Redis outage or revert service credentials.
 
@@ -66,3 +66,12 @@ and a credential. Paid models are rejected on this route. Deterministic mode sti
 sandbox authentication, the verified image and distributed Redis admission in production.
 Case exports record `experiment.executionMode`, zero deterministic AI model requests,
 and provider turns separately. Older imports without these optional fields remain valid.
+
+## v2.0 exports
+
+PDF and ZIP are produced in the browser from the loaded case, with no server export
+endpoint. Import and export do not create sandboxes or call models. Export failure
+leaves the original JSON/Markdown controls available. Bounds: 3 MiB case input,
+100,000 report characters, 40 PDF pages. Download and review evidence before sharing;
+there is no automatic anonymization or public publishing. Verify exact ZIP file
+checksums against SHA256SUMS.txt separately from the normalized case digest.

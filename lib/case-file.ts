@@ -62,13 +62,26 @@ export function caseReport(result: InvestigationCase) {
     `- Allowed hosts: ${md(result.reproducibility.networkPolicy.allowedHosts.join(', '))}`,
     `- Collection limits: ${md(JSON.stringify(result.reproducibility.collectionLimits))}`,
     ...result.reproducibility.limitations.map(value=>`- ${md(value)}`), '');
+  if (result.behavioralComparison) lines.push('## Baseline versus stimulus', '',
+    `- Availability: ${md(result.behavioralComparison.status)}`,
+    ...result.behavioralComparison.limitations.map(value => `- ${md(value)}`),
+    ...result.behavioralComparison.categories.flatMap(category => [
+      `- ${md(category.category)}: ${md(category.status)}; added ${category.added}, removed ${category.removed}, changed ${category.changed}; truncated: ${category.truncated ? 'yes' : 'no'}.`,
+      ...category.notes.map(note => `  - ${md(note)}`),
+    ]), '');
   if (result.research) lines.push('## Research budget and usage', '',
     `- Recorded budgets: ${md(JSON.stringify(result.research.budgets))}`,
-    `- Recorded usage: ${md(JSON.stringify(result.research.usage))}`, '');
+    `- Recorded usage: ${md(JSON.stringify(result.research.usage))}`,
+    ...result.research.iterations.flatMap(iteration => [
+      `### ${md(iteration.id)} / ${md(iteration.origin)} assessment`, '',
+      md(iteration.question), md(iteration.hypothesis),
+      `Status: ${md(iteration.status)}; selected tool: ${md(iteration.selectedTool)}; result: ${md(iteration.resultStatus)}.`,
+      `Evidence references: ${iteration.evidenceIds.map(md).join(', ')}.`, md(iteration.evaluation), '',
+    ]), '');
   lines.push('## Limitations and final assessment', '',
     'Evidence describes one bounded execution. Absence of an observation does not prove absence of behavior. Associations and model assessments do not establish causation or malicious intent.', '',
     `Agent outcome: ${result.agent?.completed ? 'completed within the recorded constraints' : 'evidence insufficient for a completed agent investigation'}.`,
-    `Collection truncation: ${result.evidenceGraph?.truncated || result.browser.domTruncated || result.telemetry?.truncated || result.telemetry?.truncationMarkers.length ? 'recorded' : 'not reported'}.`,
+    `Collection truncation: ${result.evidenceGraph?.truncated || result.browser.domTruncated || result.telemetry?.truncated || result.telemetry?.truncationMarkers.length || result.behavioralComparison?.categories.some(category => category.truncated) ? 'recorded' : 'not reported'}.`,
     ...((result.telemetry?.providers ?? []).filter(p => !p.available).map(p => `- Unavailable collector: ${md(p.name)}. ${md(p.reason)}`)), '',
     '## Reproduction steps', '',
     '1. Preserve the accompanying JSON case and its recorded image, experiment, model and evidence identifiers.',

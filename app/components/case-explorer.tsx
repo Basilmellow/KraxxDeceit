@@ -56,6 +56,18 @@ export default function CaseExplorer({ result }: { result: InvestigationCase }) 
     requestAnimationFrame(() => { inspectorHeading.current?.focus({ preventScroll: true }); inspectorHeading.current?.scrollIntoView({ block: 'start' }); });
   }
   const pickEvent = (id: string) => inspect({ kind: 'event', id });
+  const [exporting, setExporting] = useState(false), [exportStatus, setExportStatus] = useState('');
+  async function exportDocument(bundle = false) {
+    setExporting(true); setExportStatus('Preparing local export…');
+    try {
+      const { casePdf, caseBundle, exportFilename } = await import('@/lib/case-export');
+      const bytes = bundle ? await caseBundle(result) : await casePdf(result);
+      const href = URL.createObjectURL(new Blob([new Uint8Array(bytes).buffer], { type: bundle ? 'application/zip' : 'application/pdf' }));
+      const link = document.createElement('a'); link.href = href; link.download = exportFilename(result.caseId) + (bundle ? '-research.zip' : '.pdf'); link.click();
+      setTimeout(() => URL.revokeObjectURL(href), 1000); setExportStatus('Export prepared locally.');
+    } catch (error) { setExportStatus(error instanceof Error ? error.message : 'Could not prepare the export.'); }
+    finally { setExporting(false); }
+  }
   function exportCase(report = false) {
     const href = URL.createObjectURL(new Blob([report ? caseReport(result) : JSON.stringify(result, null, 2)], { type: report ? 'text/markdown' : 'application/json' }));
     const link = document.createElement('a'); link.href = href; link.download = result.caseId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 100) + (report ? '.md' : '.json'); link.click(); setTimeout(() => URL.revokeObjectURL(href), 1000);
@@ -66,7 +78,7 @@ export default function CaseExplorer({ result }: { result: InvestigationCase }) 
   const warning = graph.truncated || result.telemetry?.truncated || result.telemetry?.truncationMarkers.length || result.browser.domTruncated || events.some(item => item.action === 'telemetry.truncated');
   return <section className="case-explorer" aria-label="Case evidence explorer">
     <header className="case-overview panel">
-      <div className="case-section-heading"><div><p className="panel-kicker">RESEARCH CASE · {result.status}</p><h2>{result.caseId}</h2></div><div className="case-ref-links"><button className="case-button" onClick={() => exportCase()}>DOWNLOAD CASE</button><button className="case-button" onClick={() => exportCase(true)}>DOWNLOAD REPORT</button></div></div>
+      <div className="case-section-heading"><div><p className="panel-kicker">RESEARCH CASE · {result.status}</p><h2>{result.caseId}</h2></div><div className="case-ref-links"><button className="case-button" onClick={() => exportCase()}>DOWNLOAD CASE</button><button className="case-button" onClick={() => exportCase(true)}>DOWNLOAD REPORT</button><button className="case-button" disabled={exporting} onClick={() => exportDocument()}>DOWNLOAD PDF</button><button className="case-button" disabled={exporting} onClick={() => exportDocument(true)}>DOWNLOAD BUNDLE</button></div></div><p className="case-note">PDF and ZIP exports are generated locally. The bundle contains JSON evidence, PDF and Markdown summaries, and file checksums. Review target data before sharing; exports are not automatically anonymized.</p><p role="status" aria-live="polite">{exportStatus}</p>
       <p>{result.summary}</p><p className="case-target">{result.target.submittedUrl}</p>
       <div className="case-metrics"><div><strong>{events.length}</strong><span>recorded events</span></div><div><strong>{graph.nodes.length}</strong><span>graph nodes</span></div><div><strong>{graph.edges.length}</strong><span>relationships</span></div><div><strong>{result.hypotheses.length}</strong><span>hypotheses</span></div></div>
       <p className="case-note">Observations describe this bounded run. Relationships and hypotheses do not establish malicious intent or prove causation.</p>

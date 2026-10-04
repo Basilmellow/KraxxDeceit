@@ -13,8 +13,9 @@ Updated 2026-10-04. The master plan is the original architectural snapshot; this
 | v0.9 reproducibility/export consistency | Implemented, locally checked and deployed; production AI incomplete | v0.9-verification.md |
 | v0.9.1 reliability preparation | Deployed; one production AI completion, fixed free model gate still open | v0.9.1-verification.md |
 | v1 controlled public research platform | Deployed and verified | Deterministic default; optional free AI experimental; v1-verification.md |
+| v2.0 PDF and research bundles | Deployed and verified | v2.0-verification.md and V2-PLAN.md |
 
-Current public release: **1.0.0**, https://kraxxdeceit.kraxxsec.com/demo.
+Current public release: **2.0.0**, https://kraxxdeceit.kraxxsec.com/demo.
 
 Completed this batch: three individually built/deployed phases. Final suite 150 tests, no skips. Local deterministic runs completed; live production model failures are retained and labeled incomplete. Case imports stay local, no custom URLs/experiment definitions/model parameters accepted by demos. Arbitrary URL investigation is disabled in production. Changes were uncommitted during validation; the user subsequently authorized commit and push.
 
@@ -42,3 +43,14 @@ production default scenarios completed with zero AI model requests and engine-or
 assessments. Desktop/mobile/download/digest/tamper checks passed. Local dev remains at
 http://localhost:3000/demo. Deployment dpl_HPkgmSNbyKJNNUuXYMin2qEA33Ga. Verified
 source archive includes 121 files with no configured credential matches; Git publication was subsequently authorized by the user. See v1-verification.md for case records and remaining limits.
+
+## v2.0 scope
+
+User selected local PDF reports and sharing-ready ZIP exports. 156 tests passed;
+local download, checksum, evidence preservation, PDF render and mobile checks passed.
+Authentication/private storage and controlled publication are later phases.
+
+V2.0 public download checks passed: PDF, ZIP, exact file checksums, preserved evidence,
+comparison limits, desktop/mobile and zero export API calls. A fresh deterministic
+research case completed and its sandbox stopped. Local and production builds and
+health passed. The user authorized committing the verified v2 release.

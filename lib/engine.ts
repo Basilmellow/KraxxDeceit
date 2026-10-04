@@ -256,7 +256,7 @@ export async function investigateUrl(rawUrl: string, experiment?: ExperimentDefi
       events,
       evidenceGraph: linkedEvidence.evidenceGraph,
       observations,
-      provenance: { engineVersion: `1.0.0-playwright-${PLAYWRIGHT_VERSION}`, sandbox: "Vercel Firecracker Sandbox", sandboxImage: sandbox.image ?? configuredSandboxImage(), browserVersion: "153.0.8010.12" },
+      provenance: { engineVersion: `2.0.0-playwright-${PLAYWRIGHT_VERSION}`, sandbox: "Vercel Firecracker Sandbox", sandboxImage: sandbox.image ?? configuredSandboxImage(), browserVersion: "153.0.8010.12" },
       raw: { stdout: browserRun.stdout, stderr: browserRun.stderr },
     }), experiment);
   } finally {
