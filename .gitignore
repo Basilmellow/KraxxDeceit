@@ -10,7 +10,8 @@ out/
 .DS_Store
 
 # local case and CLI output
-cases/
+/cases/
+/docs/cases/
 .codex-localappdata/
 *.tsbuildinfo
 

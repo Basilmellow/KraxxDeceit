@@ -1,6 +1,7 @@
 import { DENIED_SANDBOX_SUBNETS } from './url-safety';
+import { CONTROLLED_DEMO_URL } from './controlled-demo-catalog';
 export const LIMITS = { requestMs: 150_000, sandboxMs: 140_000, caseBytes: 3 * 1024 * 1024, events: 2000, bodyBytes: 4096, windowMs: 600_000, perClient: 3, clientConcurrent: 1, concurrent: 3, leaseMs: 180_000 } as const;
-export const DEMO_URL = 'https://example.com/kraxx-controlled-demo';
+export const DEMO_URL = CONTROLLED_DEMO_URL;
 export function internalRoutesEnabled() { return process.env.NODE_ENV === 'development'; }
 export function productionConfigurationValid() {
   if (process.env.NODE_ENV !== 'production') return true;

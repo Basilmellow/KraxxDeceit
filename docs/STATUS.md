@@ -14,8 +14,10 @@ Updated 2026-10-04. The master plan is the original architectural snapshot; this
 | v0.9.1 reliability preparation | Deployed; one production AI completion, fixed free model gate still open | v0.9.1-verification.md |
 | v1 controlled public research platform | Deployed and verified | Deterministic default; optional free AI experimental; v1-verification.md |
 | v2.0 PDF and research bundles | Deployed and verified | v2.0-verification.md and V2-PLAN.md |
+| v3 authentication/private storage | Deployed and verified | v3-verification.md |
+| v4 advanced controlled studies | Deployed and verified within bounded scope | v4-verification.md and V3-V4-PLAN.md |
 
-Current public release: **2.0.0**, https://kraxxdeceit.kraxxsec.com/demo.
+Current public release: **4.0.0**, https://kraxxdeceit.kraxxsec.com/demo.
 
 Completed this batch: three individually built/deployed phases. Final suite 150 tests, no skips. Local deterministic runs completed; live production model failures are retained and labeled incomplete. Case imports stay local, no custom URLs/experiment definitions/model parameters accepted by demos. Arbitrary URL investigation is disabled in production. Changes were uncommitted during validation; the user subsequently authorized commit and push.
 
@@ -26,7 +28,8 @@ Completed this batch: three individually built/deployed phases. Final suite 150 
 - Deployment source and dependency lock are now captured in a verified local v0.9.1 archive and per-file manifest. This is an uncommitted snapshot; no signed/published Git release or runtime-secret backup is claimed.
 - Confirm support/operational ownership, rollback procedure and monitoring for the intended public launch. No uptime promise or public-launch stability claim is made.
 
-Persistent case storage, PDF reports and unrestricted target investigation are future capabilities rather than deployed features.
+Private case storage and local PDF reports are now deployed. Unrestricted target
+investigation remains outside the controlled public release.
 
 ## Latest v1 gate progress
 
@@ -54,3 +57,10 @@ V2.0 public download checks passed: PDF, ZIP, exact file checksums, preserved ev
 comparison limits, desktop/mobile and zero export API calls. A fresh deterministic
 research case completed and its sandbox stopped. Local and production builds and
 health passed. The user authorized committing the verified v2 release.
+
+V2 committed/pushed as fb982ca. V3 live Supabase ownership and quota-race checks
+passed with exact cleanup; local and production private workspace flows passed.
+V4's four-run manual engine study, local UI, imports/exports and rate-limit recovery
+checks passed. Production v4 health, one admitted real study run, import/export/checksum/
+tamper/mobile checks and the private workspace regression passed. Public admission
+limits remain unchanged. Deployment dpl_EqcBZs8czxzXS4kYchqY3WV7iL2u.

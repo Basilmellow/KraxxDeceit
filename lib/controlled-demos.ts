@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { BASIC_INDIRECT_PROMPT_INJECTION } from '../experiments/web-agent/prompt-injection-basic';
 import type { ExperimentDefinition } from './experiment-schema';
-import { DEMO_URL } from './production-policy';
+import { CONTROLLED_DEMO_URL as DEMO_URL } from './controlled-demo-catalog';
 export const DemoRequestSchema = z.object({ scenario: z.enum(['prompt-injection', 'neutral-control']).optional(), mode: z.enum(['deterministic', 'ai']).optional() }).strict();
 import { DEMO_SCENARIOS, type DemoScenario } from './controlled-demo-catalog';
 export type { DemoScenario } from './controlled-demo-catalog';

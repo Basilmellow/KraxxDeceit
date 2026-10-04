@@ -30,7 +30,9 @@ function main() {
   const entries=spawnSync('tar',['-tzf',archive],{encoding:'utf8'});if(entries.status!==0)throw new Error('Archive validation failed.');
   const names=entries.stdout.trim().split(/\r?\n/).map(p=>p.replace(/^\.\//,'')).sort();
   if(JSON.stringify(names)!==JSON.stringify(files.map(f=>f.path).sort()))throw new Error('Archive file list mismatch.');
-  const record={version,scope:'deployment-source-only-no-runtime-secrets',sourceCommit:'uncommitted-working-tree',files,archiveSha256:createHash('sha256').update(readFileSync(archive)).digest('hex'),createdAt:new Date().toISOString()};
+  const head=spawnSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'});
+  const status=spawnSync('git',['status','--porcelain','--untracked-files=normal'],{cwd:root,encoding:'utf8'});
+  const record={version,scope:'deployment-source-only-no-runtime-secrets',sourceCommit:head.status===0?head.stdout.trim():null,workingTreeDirty:status.status!==0||Boolean(status.stdout.trim()),files,archiveSha256:createHash('sha256').update(readFileSync(archive)).digest('hex'),createdAt:new Date().toISOString()};
   writeFileSync(resolve(output,'manifest.json'),JSON.stringify(record,null,2));
   console.log(JSON.stringify({version,files:files.length,archive,archiveSha256:record.archiveSha256,credentialMatches:0}));
 }

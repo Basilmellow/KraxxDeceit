@@ -494,3 +494,4 @@ a:focus-visible, button:focus-visible, select:focus-visible, summary:focus-visib
 .case-file-label input { max-width:100%; }
 .case-file-label { min-width:0; } .case-file-label input { width:100%; box-sizing:border-box; }
 .case-file-label select { color:var(--foreground); background:var(--surface); border:1px solid var(--border-strong); border-radius:7px; padding:10px 12px; min-height:44px; width:100%; box-sizing:border-box; }
+.case-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:20px; }

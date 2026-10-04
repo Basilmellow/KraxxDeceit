@@ -3,7 +3,7 @@
 .next/
 node_modules/
 .env*
-cases/
+/cases/
 docs/cases/
 .codex-localappdata/
 *.tsbuildinfo

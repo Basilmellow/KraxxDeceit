@@ -33,7 +33,8 @@ This captures deployment source with per-file SHA-256 values, verifies archive e
 and rejects configured credential values. It excludes runtime secrets, local cases,
 QA exports, Git internals and dependency/build directories. Preserve the archive and
 manifest securely; they do not replace runtime configuration or a reviewed Git release.
-The archive records an uncommitted source snapshot and makes no Git publication claim.
+The archive records the source commit and working-tree status. Preserve the Git
+commit separately; source checksums do not establish authenticity or back up secrets.
 
 ## Rollback and incident checks
 
@@ -75,3 +76,27 @@ leaves the original JSON/Markdown controls available. Bounds: 3 MiB case input,
 100,000 report characters, 40 PDF pages. Download and review evidence before sharing;
 there is no automatic anonymization or public publishing. Verify exact ZIP file
 checksums against SHA256SUMS.txt separately from the normalized case digest.
+
+## v3 private workspace and v4 studies
+
+Production requires SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY; configure only the
+publishable/anon key as Sensitive Vercel configuration. Never use a service-role key
+or transfer test account credentials. Apply the reviewed private_cases migration to
+the intended Supabase project. Accounts are provisioned by the project owner; public
+signup, password reset and email delivery are not part of this release.
+HTTP-only cookies, server getUser checks, explicit owner filters and database RLS
+protect case operations. Save is explicit and immutable; delete removes the row.
+Payload caps: owner 20 cases/20 MiB, global 200 cases/100 MiB; provider overhead and
+backups are separate. Monitor Supabase availability and storage; free projects may
+pause when inactive. GET /api/health is application liveness, not a database probe.
+
+Known application rollback for v4: verified v3 deployment
+dpl_9tWBfKVbBn9NsAWUSGVupw25YWS5. V3 rollback: verified v2 deployment
+dpl_E8WNQBrAud9rAeZ2SiL8TsxNQ8Jo. Use the existing Vercel rollback command with
+the chosen ID; rollback does not remove the Supabase database or its saved rows.
+
+/experiments records four explicit deterministic controlled runs. Keep the existing
+public admission limits and wait across windows. Do not raise limits for a study or
+retry automatically. Download study JSON to preserve partial progress; import and
+export are local. Full study storage/public links and AI susceptibility experiments
+are not enabled. See v4-verification.md for observed scope and limitations.
