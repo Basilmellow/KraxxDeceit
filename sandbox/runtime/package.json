@@ -1,0 +1,9 @@
+{
+  "name": "kraxxdeceit-sandbox-runtime",
+  "version": "0.2.1",
+  "private": true,
+  "description": "Pinned browser runtime only; no application or credentials.",
+  "dependencies": {
+    "playwright": "1.63.0"
+  }
+}

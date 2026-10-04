@@ -13,3 +13,6 @@ out/
 cases/
 .codex-localappdata/
 *.tsbuildinfo
+
+.vercel
+.env*

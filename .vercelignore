@@ -1,0 +1,10 @@
+.git/
+.vercel/
+.next/
+node_modules/
+.env*
+cases/
+docs/cases/
+.codex-localappdata/
+*.tsbuildinfo
+*.log

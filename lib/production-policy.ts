@@ -6,6 +6,10 @@ export function productionConfigurationValid() {
   if (process.env.NODE_ENV !== 'production') return true;
   return ['openrouter', 'openai'].includes(process.env.AI_PROVIDER ?? '') && Boolean(process.env.AI_MODEL?.trim()) && Boolean((process.env.AI_PROVIDER === 'openrouter' ? process.env.OPENROUTER_API_KEY : process.env.OPENAI_API_KEY)?.trim());
 }
+export function controlledAiConfigurationValid() {
+  const model = process.env.AI_MODEL?.trim();
+  return process.env.AI_PROVIDER === 'openrouter' && Boolean(model && (model === 'openrouter/free' || model.endsWith(':free'))) && Boolean(process.env.OPENROUTER_API_KEY?.trim());
+}
 export const PROVISIONING_POLICY = { allow: ['registry.npmjs.org', 'cdn.playwright.dev', 'playwright.download.prss.microsoft.com', 'cdn.playwright.download.prss.microsoft.com', 'amazonlinux.com', '*.amazonlinux.com'], subnets: { deny: DENIED_SANDBOX_SUBNETS } };
 export function investigationPolicy(host: string, destinations?: string[]) { return { allow: destinations ?? [host.replace(/^\[|\]$/g, '').replace(/\.$/, '')], subnets: { deny: DENIED_SANDBOX_SUBNETS } }; }
 export class PublicRequestError extends Error { constructor(public status: number, message: string) { super(message); } }

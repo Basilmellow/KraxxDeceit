@@ -1,0 +1,8 @@
+**
+!Dockerfile
+!.dockerignore
+!image-metadata.json
+!verify-browser.cjs
+!runtime/
+!runtime/package.json
+!runtime/package-lock.json

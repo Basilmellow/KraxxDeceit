@@ -220,7 +220,7 @@ export function linkHypothesesToEvidenceGraph(graph: EvidenceGraph, events: read
       : event.action.includes("process") ? "PROCESS"
       : "PAGE";
     const label = event.details.url ?? event.details.hostname ?? event.details.host ?? event.details.destinationIp ?? event.details.command ?? event.action;
-    return { id: `node-${id}`, type: nodeType, label: limitedText(label), details: { eventId: id, source: event.source, action: event.action, timestampMs: String(event.timestampMs), ...event.details } };
+    return { id: `node-${id}`, type: nodeType, label: limitedText(label), details: { ...event.details, eventId: id, source: event.source, action: event.action, timestampMs: String(event.timestampMs), phase: event.phase ?? event.details.phase ?? "unknown", trafficScope: event.trafficScope ?? "unknown" } };
   });
   const evidenceIds = new Set(evidenceNodes.map((node) => node.id));
   const oldNodes = graph.nodes.filter((node) => !evidenceIds.has(node.id)).slice(0, Math.max(0, 100 - evidenceNodes.length));

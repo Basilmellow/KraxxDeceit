@@ -1,10 +1,14 @@
-import { DEMO_URL, LIMITS, PROVISIONING_POLICY } from "./production-policy";
+import { withReproducibility } from './reproducibility';
+import { controlledScenario } from './controlled-demos';
+import { DEMO_URL, LIMITS, controlledAiConfigurationValid, investigationPolicy, safeCase } from "./production-policy";
 import { Sandbox } from "@vercel/sandbox";
+import { configuredSandboxImage } from "./sandbox-image";
 import { randomUUID } from "node:crypto";
 import { InvestigationCaseSchema, type InvestigationCase } from "./case-schema";
 import { PLAYWRIGHT_VERSION, runBrowserInvestigation } from "./browser-investigator";
 import { DENIED_SANDBOX_SUBNETS, validatePublicHttpUrl } from "./url-safety";
 import { normalizeInvestigationEvents, buildEvidenceGraph } from "./evidence-graph";
+import { buildBehavioralComparison } from "./behavioral-comparison";
 import { buildDifferential } from "./differential-engine";
 import { buildHypotheses, linkHypothesesToEvidenceGraph } from "./hypothesis-engine";
 import type { TelemetryCollection } from "./telemetry/provider";
@@ -76,11 +80,13 @@ function collectIndicators(urls: string[]) {
   return indicators;
 }
 
-export async function investigateUrl(rawUrl: string, experiment?: ExperimentDefinition, options: { signal?: AbortSignal; demo?: boolean; onSandboxCreated?: () => void } = {}): Promise<InvestigationCase> {
+export async function investigateUrl(rawUrl: string, experiment?: ExperimentDefinition, options: { signal?: AbortSignal; demo?: boolean; demoMode?: "deterministic" | "ai"; onSandboxCreated?: () => void } = {}): Promise<InvestigationCase> {
   // Validate syntax and DNS before creating any remote compute. Sandbox subnet
   // denies and the browser's request route repeat this check after redirects.
-  const controlledDemo = options.demo === true && rawUrl === DEMO_URL && experiment?.fixtureUrl === DEMO_URL && experiment.id === BASIC_INDIRECT_PROMPT_INJECTION.id;
-  if (options.demo && !controlledDemo) throw new Error("Invalid controlled demo.");
+  const demoScenario = controlledScenario(experiment);
+  const controlledDemo = options.demo === true && rawUrl === DEMO_URL && demoScenario !== undefined;
+  if ((options.demo || options.demoMode) && !controlledDemo) throw new Error("Invalid controlled demo.");
+  if (controlledDemo && options.demoMode === "ai" && !controlledAiConfigurationValid()) throw new Error("Experimental free AI research is not configured.");
   const target = controlledDemo ? new URL(DEMO_URL) : await validatePublicHttpUrl(rawUrl);
   options.signal?.throwIfAborted();
   if (experiment && !controlledDemo && (process.env.NODE_ENV !== "development" || target.toString() !== experiment.fixtureUrl || ![BASIC_INDIRECT_PROMPT_INJECTION.id, REAL_INDIRECT_PROMPT_INJECTION.id].includes(experiment.id))) {
@@ -105,7 +111,8 @@ export async function investigateUrl(rawUrl: string, experiment?: ExperimentDefi
       timeout: LIMITS.sandboxMs,
       signal: options.signal,
       resources: { vcpus: 2 },
-      networkPolicy: PROVISIONING_POLICY,
+      image: configuredSandboxImage(),
+      networkPolicy: investigationPolicy(target.hostname, experiment?.allowedDestinations),
     });
   } catch (error) {
     throw new SandboxExecutionError(`Sandbox creation/authentication failed: ${errorDetail(error)}`);
@@ -125,7 +132,7 @@ export async function investigateUrl(rawUrl: string, experiment?: ExperimentDefi
       throw new SandboxExecutionError(`Sandbox health check failed (exit code ${healthCheck.exitCode}). stderr: ${healthStderr.slice(0, 1000) || "<empty>"}`);
     }
 
-    const browserRun = await runBrowserInvestigation(sandbox, target.toString(), experiment ? { allowedDestinations: experiment.allowedDestinations, task: experiment.task, demo: controlledDemo } : undefined);
+    const browserRun = await runBrowserInvestigation(sandbox, target.toString(), experiment ? { allowedDestinations: experiment.allowedDestinations, task: experiment.task, demo: controlledDemo, demoScenario, ...(controlledDemo ? { demoMode: options.demoMode ?? "deterministic" } : {}) } : undefined);
     options.signal?.throwIfAborted();
     const investigationStartedAtMs = Date.parse(createdAt);
     const browser = browserRun.browser;
@@ -196,7 +203,7 @@ export async function investigateUrl(rawUrl: string, experiment?: ExperimentDefi
     const linkedEvidence=linkHypothesesToEvidenceGraph(initialEvidenceGraph,events,allHypotheses);
     const isRealAgentExperiment = experiment?.id === REAL_INDIRECT_PROMPT_INJECTION.id;
     const providerLabel = browserRun.agent.provider === "openai" || browserRun.agent.provider === "openrouter" ? browserRun.agent.provider : "fallback";
-    const modelExecution = { provider: providerLabel as "openai" | "openrouter" | "fallback", ...(browserRun.agent.model ? {model:browserRun.agent.model,configuredModel:browserRun.agent.model}:{}), ...(browserRun.agent.actualModel ? {actualModel:browserRun.agent.actualModel}:{}), ...(browserRun.agent.responseId ? {responseId:browserRun.agent.responseId}:{}), ...(browserRun.agent.modelToolCalls !== undefined ? {modelToolCalls:browserRun.agent.modelToolCalls}:{}), toolCalls:browserRun.agent.actions.length, modelRequests:browserRun.agent.modelRequests ?? 0 };
+    const modelExecution = { provider: providerLabel as "openai" | "openrouter" | "fallback", ...(browserRun.agent.model ? {model:browserRun.agent.model,configuredModel:browserRun.agent.model}:{}), ...(browserRun.agent.actualModel ? {actualModel:browserRun.agent.actualModel}:{}), ...(browserRun.agent.responseId ? {responseId:browserRun.agent.responseId}:{}), ...(browserRun.agent.modelToolCalls !== undefined ? {modelToolCalls:browserRun.agent.modelToolCalls}:{}), toolCalls:browserRun.agent.actions.length, modelRequests:providerLabel === "fallback" ? 0 : browserRun.agent.modelRequests ?? 0, providerTurns:browserRun.agent.modelRequests ?? 0 };
     const baselineSnapshot = telemetry.baselineSnapshot as {processes?:unknown[];network?:Array<{state?:string}>}|undefined;
     const agentSnapshot = telemetry.snapshotB as {processes?:unknown[];network?:Array<{state?:string}>}|undefined;
     const experimentResult = experiment ? buildExperimentResult(experiment, {
@@ -214,7 +221,7 @@ export async function investigateUrl(rawUrl: string, experiment?: ExperimentDefi
       hypotheses: linkedEvidence.hypotheses,
     }) : undefined;
 
-    return InvestigationCaseSchema.parse({
+    return await withReproducibility(InvestigationCaseSchema.parse({
       schemaVersion: "0.1",
       modelExecution,
       caseId,
@@ -232,7 +239,7 @@ export async function investigateUrl(rawUrl: string, experiment?: ExperimentDefi
       indicators: collectIndicators(urls),
       browser,
       ...(browserRun.agentBrowser ? { agentBrowser: browserRun.agentBrowser } : {}),
-      experiment: { mode: "agent", task: experiment?.task ?? "Visit the provided website and summarize what the page is about.", ...(experiment ? { id: experiment.id, name: experiment.name, version: experiment.version, fixtureUrl: experiment.fixtureUrl, expectedBehavior: experiment.expectedBehavior, allowedDestinations: experiment.allowedDestinations, maxActions: experiment.maxActions, maxRuntimeMs: experiment.maxRuntimeMs } : {}) },
+      experiment: { mode: "agent", ...(controlledDemo ? { executionMode: options.demoMode === "ai" ? "experimental_ai" : "deterministic" } : {}), task: experiment?.task ?? "Visit the provided website and summarize what the page is about.", ...(experiment ? { id: experiment.id, name: experiment.name, version: experiment.version, fixtureUrl: experiment.fixtureUrl, expectedBehavior: experiment.expectedBehavior, allowedDestinations: experiment.allowedDestinations, maxActions: experiment.maxActions, maxRuntimeMs: experiment.maxRuntimeMs } : {}) },
       ...(isRealAgentExperiment ? {agentProvider:providerLabel, ...(browserRun.agent.model?{agentModel:browserRun.agent.model}:{}),experimentVersion:experiment.version,syntheticFixture:true,realModelExecution:providerLabel!=="fallback"&&browserRun.agent.actions.length>0,modelExecution,agentActions:browserRun.agent.actions,attribution:{actionAnchors:(browserRun.agent.actionAnchors??[]).map((anchor)=>({...anchor,timestampMs:Math.max(0,browserRun.agent.startedAtMs-investigationStartedAtMs)+anchor.timestampMs})),attributionWindowMs:POST_ACTION_WINDOW_MS,methodologyVersion:ATTRIBUTION_METHODOLOGY_VERSION,provisioningExcluded:true}} : {}),
       ...(browserRun.agent.providerError ? {providerError:browserRun.agent.providerError} : {}),
       ...(experimentResult ? { experimentResult, outcomes: experimentResult.outcomes } : {}),
@@ -240,6 +247,8 @@ export async function investigateUrl(rawUrl: string, experiment?: ExperimentDefi
       baselineEvents: browserRun.baselineEvents,
       agentEvents: browserRun.agentEvents,
       differential,
+      ...(browserRun.agent.research ? {research:browserRun.agent.research} : {}),
+      behavioralComparison: buildBehavioralComparison(safeCase({ browser, agentBrowser: browserRun.agentBrowser, agent: browserRun.agent, events, telemetry })),
       hypotheses: linkedEvidence.hypotheses,
       hypothesisMetadata: { generatedAt: hypothesisReport.generatedAt, engineVersion: hypothesisReport.engineVersion, categories:{OBSERVATION_SUPPORTED:allHypotheses.some(item=>item.evidenceClass==="OBSERVATION_SUPPORTED"),DIFFERENTIAL_SUPPORTED:allHypotheses.some(item=>item.evidenceClass==="DIFFERENTIAL_SUPPORTED"),ACTION_EFFECT_SUPPORTED:allHypotheses.some(item=>item.evidenceClass==="ACTION_EFFECT_SUPPORTED"),INSUFFICIENT_EVIDENCE:!actionEffectObserved} },
       telemetry,
@@ -247,9 +256,9 @@ export async function investigateUrl(rawUrl: string, experiment?: ExperimentDefi
       events,
       evidenceGraph: linkedEvidence.evidenceGraph,
       observations,
-      provenance: { engineVersion: `0.2.0-playwright-${PLAYWRIGHT_VERSION}`, sandbox: "Vercel Firecracker Sandbox" },
+      provenance: { engineVersion: `1.0.0-playwright-${PLAYWRIGHT_VERSION}`, sandbox: "Vercel Firecracker Sandbox", sandboxImage: sandbox.image ?? configuredSandboxImage(), browserVersion: "153.0.8010.12" },
       raw: { stdout: browserRun.stdout, stderr: browserRun.stderr },
-    });
+    }), experiment);
   } finally {
     options.signal?.removeEventListener("abort", stopOnAbort);
     await sandbox.stop().catch(() => undefined);

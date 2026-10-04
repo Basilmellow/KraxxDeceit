@@ -98,3 +98,17 @@ test("OpenRouter final response completes the existing agent loop", async () => 
     assert.equal(run.actions[0]?.tool, "finish");
   });
 });
+
+test('research tool arguments lift a strict public assessment out of browser input',async()=>{
+  await withFetch(async (_input,init)=>{const body=JSON.parse(String(init?.body));assert.equal(body.tool_choice,'required');assert.equal(body.parallel_tool_calls,undefined);assert.deepEqual(body.provider,{require_parameters:true});assert.equal(body.tools[0].function.strict,true);assert.match(body.messages[1].content,/exactly one allowed browser tool call/);assert.equal(body.max_tokens,4096);assert.ok(body.tools[0].function.parameters.required.includes('research'));return completion({tool_calls:[{function:{name:'get_page_text',arguments:JSON.stringify({research:{question:'What does the page show?',hypothesis:'The page describes a fixture.',evidenceIds:['page-context-001'],status:'insufficient_evidence'}})}}]});},async()=>{
+    const c: import("../lib/agent/provider").AgentContext=await context();c.research={evidence:[{id:'page-context-001',description:'Untrusted page snapshot'}],priorAssessments:[],remainingExperiments:5,remainingTools:10,remainingModelTurns:8};const d=await new OpenRouterAgentProvider(key,'openrouter/free').generateAction(c);assert.deepEqual(d.input,{});assert.equal(d.research?.evidenceIds[0],'page-context-001');
+  });
+});
+test('output-limited provider response is classified and keeps model provenance without storing reasoning',async()=>{
+ await withFetch(async()=>new Response(JSON.stringify({model:'test-model',id:'test-response',choices:[{finish_reason:'length',message:{content:'',reasoning:'PRIVATE-NOT-RETAINED'}}]})),async()=>{
+   const p=new OpenRouterAgentProvider(key,'openrouter/free');await assert.rejects(p.generateAction(await context()),/output_limit/);assert.equal(p.actualModel,'test-model');assert.equal(p.responseId,'test-response');assert.ok(!JSON.stringify(p).includes('PRIVATE-NOT-RETAINED'));
+ });
+});
+test('multiple suggested tools are rejected instead of silently executing the first',async()=>{
+ await withFetch(async()=>completion({tool_calls:[{function:{name:'get_page_text',arguments:'{}'}},{function:{name:'navigate',arguments:JSON.stringify({url:'https://example.com'})}}]}),async()=>{await assert.rejects(new OpenRouterAgentProvider(key,'openrouter/free').generateAction(await context()),/multiple_tools/);});
+});

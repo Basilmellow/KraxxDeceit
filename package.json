@@ -1,6 +1,6 @@
 {
   "name": "kraxxdeceit",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "private": true,
   "description": "KraxxDeceit — hostile web research and behavioral evidence engine.",
   "scripts": {
@@ -13,7 +13,13 @@
     "sandbox:probe": "tsx scripts/probe-sandbox.ts",
     "test:hypotheses": "node --import tsx --test tests/hypothesis-engine.test.ts",
     "test:experiment": "node --import tsx --test",
-    "smoke:openrouter": "tsx scripts/openrouter-smoke.ts"
+    "smoke:openrouter": "tsx scripts/openrouter-smoke.ts",
+    "verify:sandbox-image": "tsx scripts/verify-sandbox-image.ts",
+    "smoke:browser-image": "tsx scripts/smoke-browser-image.ts",
+    "verify:provider-contract": "tsx scripts/verify-provider-contract.ts",
+    "verify:admission": "tsx scripts/verify-admission.ts",
+    "capture:release": "tsx scripts/capture-release.ts",
+    "smoke:neutral-demo": "tsx scripts/smoke-neutral-demo.ts"
   },
   "dependencies": {
     "@vercel/sandbox": "^3.5.1",

@@ -20,7 +20,9 @@ export class LocalAdmission implements Admission {
 }
 const ACQUIRE = `local t=redis.call('TIME'); local now=t[1]*1000+math.floor(t[2]/1000); redis.call('ZREMRANGEBYSCORE',KEYS[2],'-inf',now); redis.call('ZREMRANGEBYSCORE',KEYS[3],'-inf',now); if tonumber(redis.call('GET',KEYS[1]) or '0')>=tonumber(ARGV[1]) then return 1 end; if redis.call('ZCARD',KEYS[2])>=tonumber(ARGV[2]) or redis.call('ZCARD',KEYS[3])>=tonumber(ARGV[3]) then return 2 end; local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('PEXPIRE',KEYS[1],ARGV[4]) end; redis.call('ZADD',KEYS[2],now+ARGV[5],ARGV[6]); redis.call('ZADD',KEYS[3],now+ARGV[5],ARGV[6]); redis.call('PEXPIRE',KEYS[2],ARGV[5]); redis.call('PEXPIRE',KEYS[3],ARGV[5]); return 0`;
 export class RedisAdmission implements Admission {
-  constructor(private url: string, private token: string, private transport = fetch) {}
+  constructor(private url: string, private token: string, private transport = fetch, private namespace = 'kraxx') {
+    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(namespace)) throw new Error('Invalid admission namespace.');
+  }
   private async command(args: (string|number)[]) {
     try {
       const response = await this.transport(this.url, { method:'POST', headers:{authorization:'Bearer '+this.token,'content-type':'application/json'}, body:JSON.stringify(args),signal:AbortSignal.timeout(5000) });
@@ -31,7 +33,7 @@ export class RedisAdmission implements Admission {
     } catch { throw new PublicRequestError(503,'Investigation protection is unavailable. Try again later.'); }
   }
   async acquire(client: string) {
-    const prefix = 'kraxx:{admission}:';
+    const prefix = this.namespace + ':{admission}:';
     const keys = [prefix+'rate:'+client,prefix+'global',prefix+'client:'+client]; const id=randomUUID();
     const result=await this.command(['EVAL',ACQUIRE,3,...keys,LIMITS.perClient,LIMITS.concurrent,LIMITS.clientConcurrent,LIMITS.windowMs,LIMITS.leaseMs,id]);
     if (result===1 || result===2) throw new PublicRequestError(429,result===1?'Investigation rate limit reached. Try again later.':'Investigation capacity reached. Try again later.');

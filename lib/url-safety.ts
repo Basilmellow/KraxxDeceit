@@ -8,7 +8,7 @@ for (const [range, prefix, type] of [
   ["192.0.0.0", 24, "ipv4"], ["192.0.2.0", 24, "ipv4"], ["192.168.0.0", 16, "ipv4"],
   ["198.18.0.0", 15, "ipv4"], ["198.51.100.0", 24, "ipv4"], ["203.0.113.0", 24, "ipv4"],
   ["224.0.0.0", 4, "ipv4"], ["240.0.0.0", 4, "ipv4"],
-  ["::", 96, "ipv6"], ["2001::", 32, "ipv6"], ["::1", 128, "ipv6"],
+  ["::", 128, "ipv6"], ["2001::", 32, "ipv6"], ["::1", 128, "ipv6"],
   ["64:ff9b::", 96, "ipv6"], ["100::", 64, "ipv6"], ["2001:db8::", 32, "ipv6"],
   ["fc00::", 7, "ipv6"], ["fe80::", 10, "ipv6"], ["ff00::", 8, "ipv6"],
 ] as const) {
@@ -36,11 +36,12 @@ export function isDevelopmentFixtureUrl(rawUrl: string) {
 
 export function isForbiddenAddress(address: string) {
   const family = isIP(address);
-  if (family === 6 && address.toLowerCase().startsWith("::ffff:")) {
-    const tail=address.slice(7);
-    if (isIP(tail)===4) return forbiddenAddresses.check(tail,"ipv4");
-    const parts=tail.split(":");
-    if(parts.length===2) { const n=(parseInt(parts[0],16)*65536)+parseInt(parts[1],16); return forbiddenAddresses.check([n>>>24,(n>>>16)&255,(n>>>8)&255,n&255].join("."),"ipv4"); }
+  if (family === 6) {
+    // Canonicalize expanded/dotted spellings before testing transition addresses.
+    const canonical = new URL(`http://[${address}]/`).hostname.slice(1, -1);
+    if (canonical.startsWith("::ffff:")) return true;
+    // Legacy IPv4-compatible notation also remains forbidden without a broad CIDR.
+    if (/^::(?:[a-f0-9]{1,4}:)?[a-f0-9]{1,4}$/i.test(canonical)) return true;
   }
   return family === 0 || forbiddenAddresses.check(address, family === 4 ? "ipv4" : "ipv6");
 }
@@ -84,9 +85,17 @@ export async function validatePublicHttpUrl(rawUrl: string, resolveAddresses = (
   return url;
 }
 
+// Keep application address validation separate from API firewall compatibility.
+export const FORBIDDEN_IPV6_SUBNETS = [
+  "::/128", "::1/128", "fc00::/7", "fe80::/10", "::ffff:0:0/96",
+  "2001::/32", "64:ff9b::/96", "100::/64", "2001:db8::/32", "ff00::/8",
+];
+
+// Production Sandbox rejected IPv6 CIDRs, including the precise unspecified /128.
+// Its firewall receives only IPv4 denies plus destination hostname allowlists.
+// IPv6 special/transition addresses stay blocked by URL, DNS and browser checks.
 export const DENIED_SANDBOX_SUBNETS = [
   "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16",
   "172.16.0.0/12", "192.0.0.0/24", "192.0.2.0/24", "192.168.0.0/16", "198.18.0.0/15",
   "198.51.100.0/24", "203.0.113.0/24", "224.0.0.0/4", "240.0.0.0/4",
-  "::/96", "2001::/32", "::1/128", "::ffff:0:0/96", "64:ff9b::/96", "100::/64", "2001:db8::/32", "fc00::/7", "fe80::/10", "ff00::/8",
 ];

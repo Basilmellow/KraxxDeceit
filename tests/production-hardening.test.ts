@@ -1,11 +1,12 @@
 import test from 'node:test';
+import { VERIFIED_SANDBOX_IMAGE } from '../lib/sandbox-image';
 import assert from 'node:assert/strict';
 import { Sandbox } from '@vercel/sandbox';
 import { LocalAdmission, RedisAdmission, admission, clientIdentity } from '../lib/investigation-admission';
 import { LIMITS, DEMO_URL, safeCase, PROVISIONING_POLICY, investigationPolicy, internalRoutesEnabled } from '../lib/production-policy';
 import { publicInvestigation, readBody } from '../lib/public-investigation';
 import { investigateUrl } from '../lib/engine';
-import { validatePublicHttpUrl } from '../lib/url-safety';
+import { validatePublicHttpUrl, FORBIDDEN_IPV6_SUBNETS } from '../lib/url-safety';
 import type { InvestigationCase } from '../lib/case-schema';
 import { GET } from '../app/api/health/route';
 
@@ -40,6 +41,15 @@ test('shared admission uses atomic Redis Lua and fails closed on backend errors'
 test('Redis denial and unexpected results do not admit work',async()=>{
   for(const result of [1,2,'unexpected']){const store=new RedisAdmission('https://redis.example','fake',(async()=>Response.json({result})) as typeof fetch);await assert.rejects(store.acquire('hash'),{status:result==='unexpected'?503:429});}
 });
+test('verification Redis namespace isolates every acquire/release key and rejects key-slot injection',async()=>{
+  const commands:unknown[][]=[];
+  const transport=(async(_url:unknown,options:RequestInit)=>{commands.push(JSON.parse(String(options.body)));return Response.json({result:0});}) as typeof fetch;
+  const store=new RedisAdmission('https://redis.example','fake',transport,'kraxx_verify_test');
+  await (await store.acquire('client'))();
+  assert.ok(commands[0].slice(3,6).every(k=>String(k).startsWith('kraxx_verify_test:{admission}:')));
+  assert.ok(commands[1].slice(3,5).every(k=>String(k).startsWith('kraxx_verify_test:{admission}:')));
+  assert.throws(()=>new RedisAdmission('https://redis.example','fake',transport,'kraxx:{production}'),/Invalid admission namespace/);
+});
 test('production refuses memory-only admission and ignores untrusted forwarding headers locally',()=>{
   const restore=env({NODE_ENV:'production',UPSTASH_REDIS_REST_URL:undefined,UPSTASH_REDIS_REST_TOKEN:undefined,VERCEL:undefined});
   try {assert.throws(()=>admission(),{status:503});assert.equal(clientIdentity(req()),clientIdentity(new Request('https://site',{headers:{'x-forwarded-for':'8.8.8.8','x-vercel-forwarded-for':'1.1.1.1'}})));}finally{restore();}
@@ -51,7 +61,7 @@ test('URL safety rejects localhost, private/mapped IPv6, metadata, link-local an
 test('production URL safety does not accept development fixture bypass',async()=>{const restore=env({NODE_ENV:'production'});try{await assert.rejects(validatePublicHttpUrl('http://localhost:3000/research-fixtures/agent-injection-basic.html'));}finally{restore();}});
 test('egress policies have explicit provisioning hosts, target-only investigation and private denies',()=>{
   assert.ok(!PROVISIONING_POLICY.allow.includes('*'));assert.ok(!PROVISIONING_POLICY.allow.includes('openrouter.ai'));
-  const policy=investigationPolicy('example.com');assert.deepEqual(policy.allow,['example.com']);assert.ok(policy.subnets.deny.includes('::ffff:0:0/96'));assert.ok(policy.subnets.deny.includes('169.254.0.0/16'));
+  const policy=investigationPolicy('example.com');assert.deepEqual(policy.allow,['example.com']);assert.ok(FORBIDDEN_IPV6_SUBNETS.includes('::ffff:0:0/96'));assert.ok(policy.subnets.deny.includes('169.254.0.0/16'));
 });
 test('all internal routes reject production, including enabled authenticated probe',async()=>{
   const restore=env({NODE_ENV:'production',KRAXX_INTERNAL_PROBE_ENABLED:'true',KRAXX_INTERNAL_PROBE_TOKEN:'test-probe-token'});
@@ -87,10 +97,10 @@ test('cross-origin requests and oversized bodies are rejected before execution',
   try {const request=req();request.headers.set('origin','https://untrusted.example');assert.equal((await publicInvestigation(request,true,deps)).status,403);await assert.rejects(readBody(req({data:'x'.repeat(5000)})),{status:413});}finally{restore();}
 });
 test('body reading respects cancellation',async()=>{const controller=new AbortController();controller.abort();await assert.rejects(readBody(req(),controller.signal),{status:504});});
-test('health exposes only liveness and version',async()=>{const response=GET();assert.equal(response.status,200);assert.deepEqual(await response.json(),{status:'ok',version:'0.2.0'});assert.equal(response.headers.get('cache-control'),'no-store');});
+test('health exposes only liveness and version',async()=>{const response=GET();assert.equal(response.status,200);assert.deepEqual(await response.json(),{status:'ok',version:'1.0.0'});assert.equal(response.headers.get('cache-control'),'no-store');});
 test('engine uses disposable bounded sandbox and stops after failed health gate',async()=>{
   const restore=env({NODE_ENV:'development',VERCEL_OIDC_TOKEN:'FAKE-OIDC-TEST-ONLY'});const original=Sandbox.create;let stopped=false;
-  Sandbox.create=(async(options)=>{assert.equal(options?.persistent,false);assert.equal(options?.timeout,LIMITS.sandboxMs);assert.deepEqual(options?.networkPolicy,PROVISIONING_POLICY);return {runCommand:async()=>({exitCode:1,stdout:async()=>'',stderr:async()=>''}),stop:async()=>{stopped=true;}} as unknown as Sandbox;}) as typeof Sandbox.create;
+  Sandbox.create=(async(options)=>{assert.equal(options?.persistent,false);assert.equal(options?.timeout,LIMITS.sandboxMs);assert.deepEqual(options?.networkPolicy,investigationPolicy('8.8.8.8'));assert.equal(options?.image,VERIFIED_SANDBOX_IMAGE);return {runCommand:async()=>({exitCode:1,stdout:async()=>'',stderr:async()=>''}),stop:async()=>{stopped=true;}} as unknown as Sandbox;}) as typeof Sandbox.create;
   try {await assert.rejects(investigateUrl('https://8.8.8.8'));assert.equal(stopped,true);}finally{Sandbox.create=original;restore();}
 });
 

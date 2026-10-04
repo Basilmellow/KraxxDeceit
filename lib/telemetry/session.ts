@@ -149,6 +149,11 @@ export class TelemetrySession {
     this.stoppedAtMs = Date.now();
   }
 
+  /** Read bounded observation labels without stopping or mutating collection. */
+  peekEvidence(): Array<{id:string;description:string}> {
+    return this.events.filter(e=>e.trafficScope==='investigation'&&e.source!=='agent').slice(-12).map(e=>({id:e.id,description:(e.source+' '+e.action+' at '+e.timestampMs+' ms; '+(e.details.url??e.details.hostname??e.details.destinationIp??'recorded observation')).slice(0,500)}));
+  }
+
   async collect(): Promise<TelemetrySessionResult> {
     if (!this.stopped) await this.stop();
     return {

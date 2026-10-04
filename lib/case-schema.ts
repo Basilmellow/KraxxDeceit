@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { ReproducibilitySchema } from './reproducibility-schema';
+import { ResearchRunSchema } from "./agent/research-schema";
+import { BehavioralComparisonSchema } from "./behavioral-comparison-schema";
 
 export const InvestigationRequestSchema = z.object({
   url: z.url().max(2048),
@@ -107,6 +110,7 @@ export const BrowserObservationSchema = z.object({
   initialScreenshot: z.string().optional(),
   finalScreenshot: z.string().optional(),
   domCaptured: z.boolean(),
+  domCapturedAtMs: z.number().int().nonnegative().optional(),
   domHtml: z.string().optional(),
   domTruncated: z.boolean(),
   domMutations: z.number().int().nonnegative(),
@@ -132,7 +136,7 @@ export const InvestigationCaseSchema = z.object({
   indicators: z.array(z.object({ type: z.string(), value: z.string() })),
   browser: BrowserObservationSchema,
   experiment: z.object({
-    mode: z.enum(["baseline", "agent"]), task: z.string().optional(), id: z.string().optional(), name: z.string().optional(), version: z.string().optional(),
+    mode: z.enum(["baseline", "agent"]), executionMode: z.enum(["deterministic", "experimental_ai"]).optional(), task: z.string().optional(), id: z.string().optional(), name: z.string().optional(), version: z.string().optional(),
     fixtureUrl: z.string().optional(), expectedBehavior: z.string().optional(), allowedDestinations: z.array(z.string()).optional(),
     maxActions: z.number().int().positive().optional(), maxRuntimeMs: z.number().int().positive().optional(),
   }).optional(),
@@ -142,7 +146,7 @@ export const InvestigationCaseSchema = z.object({
   experimentVersion:z.string().optional(),
   syntheticFixture:z.boolean().optional(),
   realModelExecution:z.boolean().optional(),
-  modelExecution:z.object({provider:z.enum(["openai","openrouter","fallback"]),model:z.string().optional(),configuredModel:z.string().optional(),actualModel:z.string().optional(),responseId:z.string().optional(),modelToolCalls:z.number().int().nonnegative().optional(),toolCalls:z.number().int().nonnegative(),modelRequests:z.number().int().nonnegative().optional()}).optional(),
+  modelExecution:z.object({provider:z.enum(["openai","openrouter","fallback"]),model:z.string().optional(),configuredModel:z.string().optional(),actualModel:z.string().optional(),responseId:z.string().optional(),modelToolCalls:z.number().int().nonnegative().optional(),toolCalls:z.number().int().nonnegative(),modelRequests:z.number().int().nonnegative().optional(),providerTurns:z.number().int().nonnegative().optional()}).optional(),
   providerError:SafeProviderErrorSchema.optional(),
   telemetryMode:z.enum(["snapshot","stream"]).optional(),
   agentActions:z.array(AgentActionSchema).max(50).optional(),
@@ -157,6 +161,9 @@ export const InvestigationCaseSchema = z.object({
   baselineEvents: z.array(BrowserEventSchema).optional(),
   agentEvents: z.array(BrowserEventSchema).optional(),
   differential: DifferentialSchema.optional(),
+  behavioralComparison: BehavioralComparisonSchema.optional(),
+  research: ResearchRunSchema.optional(),
+  reproducibility: ReproducibilitySchema.optional(),
   hypotheses: z.array(CausalHypothesisSchema).max(20).default([]),
   hypothesisMetadata: z.object({ generatedAt: z.string().datetime(), engineVersion: z.string(), categories:z.object({OBSERVATION_SUPPORTED:z.boolean(),DIFFERENTIAL_SUPPORTED:z.boolean(),ACTION_EFFECT_SUPPORTED:z.boolean(),INSUFFICIENT_EVIDENCE:z.boolean()}).optional() }).optional(),
   telemetry:TelemetrySchema.optional(),
@@ -170,7 +177,7 @@ export const InvestigationCaseSchema = z.object({
     action: z.string(),
     details: z.record(z.string(), z.string()).optional(),
   })),
-  provenance: z.object({ engineVersion: z.string(), sandbox: z.string() }),
+  provenance: z.object({ engineVersion: z.string(), sandbox: z.string(), sandboxImage: z.string().optional(), browserVersion: z.string().optional() }),
   raw: z.object({ stdout: z.string(), stderr: z.string() }),
 });
 

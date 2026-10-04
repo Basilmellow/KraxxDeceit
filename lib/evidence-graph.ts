@@ -60,7 +60,7 @@ export async function buildEvidenceGraph(input:{target:string;browser:BrowserObs
   for(const event of input.telemetry?.streamEvents??[]){
     const type:GraphNode["type"]=event.source==="agent"?"AGENT_ACTION":event.action.includes("dns")?"DNS_EVENT":event.action.includes("socket")?"SOCKET":event.action.includes("process")?"PROCESS":event.source==="network"?"BROWSER_REQUEST":"PAGE";
     const label=event.details.url??event.details.hostname??event.details.destinationIp??event.details.command??event.action;
-    const id=`node-${event.id}`;addNode({id,type,label:safeLabel(label),details:{eventId:event.id,source:event.source,action:event.action,timestampMs:String(event.timestampMs),phase:event.phase??"unknown",trafficScope:event.trafficScope??"unknown",...event.details}});
+    const id=`node-${event.id}`;addNode({id,type,label:safeLabel(label),details:{...event.details,eventId:event.id,source:event.source,action:event.action,timestampMs:String(event.timestampMs),phase:event.phase??"unknown",trafficScope:event.trafficScope??"unknown"}});
   }
   for(const relationship of input.telemetry?.streamRelationships??[]){addEdge(`node-${relationship.sourceEventId}`,`node-${relationship.targetEventId}`,relationship.type,"medium",relationship.label)}
   const cap=(input.agentBrowser?.requests.length??0)-input.browser.requests.length;

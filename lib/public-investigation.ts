@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { investigateUrl } from './engine';
 import { InvestigationRequestSchema, type InvestigationCase } from './case-schema';
 import { admission, clientIdentity, type Admission } from './investigation-admission';
-import { DEMO_URL, LIMITS, PublicRequestError, productionConfigurationValid, safeCase } from './production-policy';
-import { BASIC_INDIRECT_PROMPT_INJECTION } from '../experiments/web-agent/prompt-injection-basic';
+import { DEMO_URL, LIMITS, PublicRequestError, controlledAiConfigurationValid, productionConfigurationValid, safeCase } from './production-policy';
+import { DemoRequestSchema, controlledExperiment } from './controlled-demos';
 import { UnsafeTargetError } from './url-safety';
 export async function readBody(request: Request, signal: AbortSignal = AbortSignal.timeout(10_000)) {
   if (signal.aborted) throw new PublicRequestError(504, "Request timed out.");
@@ -48,14 +48,17 @@ export async function publicInvestigation(request: Request, demo: boolean, depen
   const headers={'Cache-Control':'no-store','X-Request-Id':requestId};
   try {
     if (!demo && process.env.NODE_ENV==='production' && process.env.KRAXX_PUBLIC_INVESTIGATIONS_ENABLED!=='true') throw new PublicRequestError(403,'Public URL investigations are disabled. Use the controlled demo.');
-    if (!productionConfigurationValid()) throw new PublicRequestError(503,'Investigation service is not configured.');
+    if (!demo && !productionConfigurationValid()) throw new PublicRequestError(503,'Investigation service is not configured.');
     const origin=request.headers.get('origin'); if(origin && origin!==new URL(request.url).origin) throw new PublicRequestError(403,'Request origin is not allowed.');
     release=await (dependencies?.admission ?? admission()).acquire(clientIdentity(request));
     const body=await readBody(request, controller.signal);
-    if(demo && (!body || typeof body!=='object' || Array.isArray(body) || Object.keys(body).length)) throw new PublicRequestError(400,'The controlled demo accepts no parameters.');
+    const demoRequest = demo ? DemoRequestSchema.safeParse(body) : undefined;
+    if(demo && !demoRequest?.success) throw new PublicRequestError(400,'Choose a supported controlled scenario. Custom parameters are not accepted.');
+    const demoMode = demoRequest?.data?.mode ?? 'deterministic';
+    if (demo && demoMode === 'ai' && !controlledAiConfigurationValid()) throw new PublicRequestError(503, 'Experimental free AI research is not configured. Use deterministic research.');
     const parsed=demo ? undefined : InvestigationRequestSchema.safeParse(body);
     if(!demo && !parsed?.success) throw new PublicRequestError(400,'Enter a valid HTTP(S) URL.');
-    const work=(dependencies?.run ?? investigateUrl)(demo?DEMO_URL:parsed!.data!.url,demo?{...BASIC_INDIRECT_PROMPT_INJECTION,fixtureUrl:DEMO_URL}:undefined,{signal:controller.signal,demo,onSandboxCreated:()=>{sandboxCreated=true;}});
+    const work=(dependencies?.run ?? investigateUrl)(demo?DEMO_URL:parsed!.data!.url,demo?controlledExperiment(demoRequest?.data?.scenario):undefined,{signal:controller.signal,demo,...(demo ? {demoMode} : {}),onSandboxCreated:()=>{sandboxCreated=true;}});
     // Keep the lease until actual cleanup completes, including after a client timeout.
     const cleanup=release; release=undefined; void work.finally(()=>cleanup?.().catch(()=>{})).catch(()=>{});
     result=await Promise.race([work,new Promise<never>((_,reject)=>{ if(controller.signal.aborted)reject(new PublicRequestError(504,'Investigation timed out.')); else controller.signal.addEventListener('abort',()=>reject(new PublicRequestError(504,'Investigation timed out.')),{once:true}); })]);
