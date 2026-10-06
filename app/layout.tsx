@@ -8,7 +8,10 @@ const onest = Onest({ subsets: ["latin"], variable: "--font-onest", display: "sw
 export const metadata: Metadata = {
   title: "KraxxDeceit — Hostile Web Research Engine",
   description:
-    "Execute hostile URLs in isolated research sandboxes and turn observed behavior into portable security cases.",
+    "Explore controlled browser experiments, inspect behavioral evidence, and export portable security research cases.",
+  metadataBase: new URL('https://kraxxdeceit.kraxxsec.com'),
+  openGraph: { title: 'KraxxDeceit — Controlled Security Research', description: 'Disposable browser experiments, inspectable evidence and portable research cases.', url: 'https://kraxxdeceit.kraxxsec.com', type: 'website', images: ['/kraxxdeceit-mark.png'] },
+  twitter: { card: 'summary', title: 'KraxxDeceit — Controlled Security Research', description: 'Disposable browser experiments, inspectable evidence and portable research cases.', images: ['/kraxxdeceit-mark.png'] },
 };
 
 export default function RootLayout({

@@ -6,6 +6,7 @@ import { RedisAdmission } from '../lib/investigation-admission';
 import { publicInvestigation } from '../lib/public-investigation';
 import type { investigateUrl } from '../lib/engine';
 
+let stage = 'configuration';
 async function main() {
   if(!process.argv.includes('--run'))throw new Error('Pass --run for isolated live Redis checks.');
   loadEnvConfig(process.cwd());
@@ -21,18 +22,24 @@ async function main() {
   }
   const store=()=>new RedisAdmission(url,key,fetch,namespace);
   try {
+    stage = 'first-acquire';
     releases.push(await store().acquire('a'));
     await assert.rejects(store().acquire('a'),{status:429});
+    stage = 'concurrent-acquire';
     const races=await Promise.allSettled(['b','c','d'].map(c=>store().acquire(c)));
     assert.equal(races.filter(r=>r.status==='fulfilled').length,2);assert.equal(races.filter(r=>r.status==='rejected'&&r.reason.status===429).length,1);
     for(const r of races)if(r.status==='fulfilled')releases.push(r.value);
     assert.equal(await command(['ZCARD',prefix+'global']),3);
+    stage = 'release';
     await Promise.all(releases.map(release=>release()));assert.equal(await command(['ZCARD',prefix+'global']),0);
     // Existing a admission counts once; two further successful admissions reach its window limit.
+    stage = 'rate-window';
     for(let i=0;i<2;i++)await (await store().acquire('a'))();
     await assert.rejects(store().acquire('a'),{status:429});
+    stage = 'expired-lease';
     await command(['ZADD',prefix+'global',0,'expired-test-lease']);await command(['ZADD',prefix+'client:expired',0,'expired-test-lease']);
     await (await store().acquire('expired'))();assert.equal(await command(['ZCARD',prefix+'global']),0);
+    stage = 'simulated-outage';
     let executions=0;
     const unavailable=new RedisAdmission(url,key,(async()=>{throw new Error('simulated transport outage');}) as typeof fetch,namespace);
     const response=await publicInvestigation(new Request('https://site/api/demo',{method:'POST',body:'{}'}),true,{admission:unavailable,run:(async()=>{executions++;throw new Error('should never run');}) as typeof investigateUrl,log:()=>{}});
@@ -46,4 +53,4 @@ async function main() {
     assert.equal(await command(['EXISTS',...keys]),0);console.log(JSON.stringify({isolatedTestKeyCleanup:'PASS'}));
   }
 }
-void main().catch(()=>{console.error('Admission verification failed. No credentials or Redis bodies are printed.');process.exitCode=1;});
+void main().catch(()=>{console.error('Admission verification failed at '+stage+'. No credentials or Redis bodies are printed.');process.exitCode=1;});

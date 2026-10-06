@@ -4,17 +4,20 @@
 
 Public product surface: **KraxxDeceit.kraxxsec.com**
 
-Current controlled release: **v4.0.0**. `/demo` runs fixed synthetic scenarios with
+Current controlled release: **v4.1.0**. `/demo` runs fixed synthetic scenarios with
 deterministic research by default; free AI remains experimental. `/workspace` provides
 authenticated private case storage with explicit save/delete and owner isolation.
 `/experiments` records four counterbalanced deterministic runs with local study
 JSON/CSV/Markdown/ZIP exports. Public rate limits can require waiting between runs;
 download partial studies to retain progress. Accounts are provisioned by the project
 owner. Arbitrary public URL investigations remain disabled.
+Start with the [public guide](https://kraxxdeceit.kraxxsec.com/guide).
+For portfolio/resume copy, see [project summary](docs/PROJECT-SUMMARY.md); for the
+release boundary and operational checks, see [launch checklist](docs/LAUNCH-CHECKLIST.md).
 See [delivery status](docs/STATUS.md), [operations](docs/OPERATIONS.md), and
 [v4 verification](docs/v4-verification.md) for observed checks and limits.
 
-## Stage 1 — working target
+## Architecture
 
 ```text
 URL
@@ -28,7 +31,9 @@ Observed redirects / content / indicators
 Portable case-shaped result
 ```
 
-This scaffold intentionally starts with a small, testable vertical slice. It does **not** claim to decide whether a URL is malicious.
+The public surface uses fixed synthetic fixtures. The local development console can
+inspect allowed URLs through the same safety checks. Results describe recorded
+observations and bounded hypotheses; they do not decide whether a URL is malicious.
 
 ## What is included
 

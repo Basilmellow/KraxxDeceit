@@ -1,6 +1,6 @@
 # KraxxDeceit delivery status
 
-Updated 2026-10-04. The master plan is the original architectural snapshot; this file records observed delivery.
+Updated 2026-10-06. The master plan is the original architectural snapshot; this file records observed delivery.
 
 | Phase | State | Verification |
 |---|---|---|
@@ -16,6 +16,7 @@ Updated 2026-10-04. The master plan is the original architectural snapshot; this
 | v2.0 PDF and research bundles | Deployed and verified | v2.0-verification.md and V2-PLAN.md |
 | v3 authentication/private storage | Deployed and verified | v3-verification.md |
 | v4 advanced controlled studies | Deployed and verified within bounded scope | v4-verification.md and V3-V4-PLAN.md |
+| v4.1 controlled public launch | Local launch gates passed; production publication in progress | v4.1-verification.md and LAUNCH-CHECKLIST.md |
 
 Current public release: **4.0.0**, https://kraxxdeceit.kraxxsec.com/demo.
 
@@ -64,3 +65,10 @@ V4's four-run manual engine study, local UI, imports/exports and rate-limit reco
 checks passed. Production v4 health, one admitted real study run, import/export/checksum/
 tamper/mobile checks and the private workspace regression passed. Public admission
 limits remain unchanged. Deployment dpl_EqcBZs8czxzXS4kYchqY3WV7iL2u.
+
+The complete four-step public UI study passed on 2026-10-06, including a real rate
+limit, local export/re-import and continuation across the actual window. Refreshed
+Redis admission and Supabase ownership/quota checks passed with exact cleanup.
+171 tests passed, zero skips. One current fixed free model completed only one of four
+bounded provider-contract attempts; AI remains experimental without a reliability
+claim. Launch uses public deterministic research and invite-only private accounts.

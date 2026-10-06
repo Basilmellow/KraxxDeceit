@@ -100,3 +100,20 @@ public admission limits and wait across windows. Do not raise limits for a study
 retry automatically. Download study JSON to preserve partial progress; import and
 export are local. Full study storage/public links and AI susceptibility experiments
 are not enabled. See v4-verification.md for observed scope and limitations.
+
+## Controlled public launch
+
+The v4.1 release keeps private accounts invite-only and public research restricted
+to fixed fixtures. /guide explains visitor workflows and evidence handling.
+PROJECT-SUMMARY.md supplies factual portfolio/resume descriptions. Use
+LAUNCH-CHECKLIST.md and v4.1-verification.md for launch gates and current observations.
+The repository owner maintains this personal research project; non-sensitive support
+uses the repository issue tracker. Do not put secrets or private evidence in issues.
+
+The production-health GitHub Actions workflow provides an independent hourly
+read-only liveness check without service credentials or model/sandbox work. It retries
+a failed check once, distinguishes network-access errors, and fails the workflow for
+actionable states. Failed-run notifications depend on the owner's GitHub settings;
+the existing Codex heartbeat continues to provide chat failure/recovery alerts.
+Review Actions periodically: schedules can be delayed or disabled for inactive public
+repositories. Neither monitor establishes an SLA or database/Redis/research readiness.

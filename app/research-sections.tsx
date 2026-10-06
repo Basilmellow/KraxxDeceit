@@ -78,5 +78,5 @@ export function ResearchDomains() {
 }
 
 export function FinalCta() {
-  return <section className="final-cta"><p className="eyebrow">MAKE THE NEXT QUESTION OBSERVABLE</p><Reveal><h2>Don’t guess what<br/>the agent did.<br/><span>Observe it.</span></h2></Reveal><p>Run a controlled experiment with KraxxDeceit.</p><div className="hero-actions"><a className="primary-cta" href="#investigation-console">Run an investigation <span aria-hidden="true">↗</span></a><a className="text-cta" href="https://github.com/Basilmellow/KraxxDeceit" target="_blank" rel="noreferrer">View GitHub <span aria-hidden="true">↗</span></a></div></section>;
+  return <section className="final-cta"><p className="eyebrow">MAKE THE NEXT QUESTION OBSERVABLE</p><Reveal><h2>Don’t guess what<br/>the agent did.<br/><span>Observe it.</span></h2></Reveal><p>Run a controlled experiment with KraxxDeceit.</p><div className="hero-actions"><a className="primary-cta" href="/demo">Explore controlled demo <span aria-hidden="true">↗</span></a><a className="text-cta" href="https://github.com/Basilmellow/KraxxDeceit" target="_blank" rel="noreferrer">View GitHub <span aria-hidden="true">↗</span></a></div></section>;
 }
