@@ -16,9 +16,9 @@ Updated 2026-10-06. The master plan is the original architectural snapshot; this
 | v2.0 PDF and research bundles | Deployed and verified | v2.0-verification.md and V2-PLAN.md |
 | v3 authentication/private storage | Deployed and verified | v3-verification.md |
 | v4 advanced controlled studies | Deployed and verified within bounded scope | v4-verification.md and V3-V4-PLAN.md |
-| v4.1 controlled public launch | Local launch gates passed; production publication in progress | v4.1-verification.md and LAUNCH-CHECKLIST.md |
+| v4.1 controlled public launch | Deployed; launch gates passed within the documented scope | v4.1-verification.md and LAUNCH-CHECKLIST.md |
 
-Current public release: **4.0.0**, https://kraxxdeceit.kraxxsec.com/demo.
+Current public release: **4.1.0**, https://kraxxdeceit.kraxxsec.com/demo.
 
 Completed this batch: three individually built/deployed phases. Final suite 150 tests, no skips. Local deterministic runs completed; live production model failures are retained and labeled incomplete. Case imports stay local, no custom URLs/experiment definitions/model parameters accepted by demos. Arbitrary URL investigation is disabled in production. Changes were uncommitted during validation; the user subsequently authorized commit and push.
 
@@ -72,3 +72,7 @@ Redis admission and Supabase ownership/quota checks passed with exact cleanup.
 171 tests passed, zero skips. One current fixed free model completed only one of four
 bounded provider-contract attempts; AI remains experimental without a reliability
 claim. Launch uses public deterministic research and invite-only private accounts.
+Public homepage/guide/mobile and private workspace regression checks passed on v4.1.
+Independent GitHub health monitor run 37451366304 succeeded; user confirmed failed-run
+alerts enabled. Fresh production case CASE-20261006-987C469F completed with a matching
+digest and zero model requests. See v4.1-verification.md for the final release record.
