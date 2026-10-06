@@ -1,15 +1,8 @@
 # KraxxDeceit browser image
 
-## Verified state — 4 October 2026
+## Image status
 
-The browser image exists locally and in the private Vercel Container Registry repository.
-It passed offline Docker verification and disposable Vercel Sandbox verification in this session.
-The application now uses the verified platform digest and checks the runtime before collecting evidence.
-Production v0.3.0 deployment and the single controlled post-deployment `/demo` passed browser/evidence checks.
-The AI agent ended with `model_error`; evidence survived. Git commit/push and clean-machine base-image reproducibility remain outstanding.
-
-See [v0.3 verification](../docs/v0.3-verification.md) for recorded evidence and outstanding gates.
-The original [master plan](../docs/MASTER-PLAN.md) is a supplied historical snapshot; use the verification report for current results.
+The application uses a verified image manifest from a private Vercel Container Registry repository. Offline Docker and remote sandbox checks are recorded in the [release verification](../docs/VERIFICATION.md). Registry access is required; cloning this repository does not grant it. Clean-machine base-image reproducibility remains a follow-up.
 
 ## Image contract
 
@@ -31,8 +24,7 @@ Do not silently overwrite an immutable image tag.
 
 The Dockerfile currently uses the locally built `kraxxdeceit-node24-base:24.19.0` base.
 Its observed local image ID is `sha256:b8d67466671adcbb03b1e4dc3e2f1d945a8cb332c323d63f1088ab1e2c1fcc6d`.
-The supplied plan records upstream Vercel Sandbox revision `6fc8e16fd606beab8f99546482f11cc40c3e5a8e`;
-that source checkout was not re-audited in this session. A clean-machine base build recipe and
+A clean-machine base build recipe and
 immutable base reference remain a reproducibility follow-up. `image-metadata.json` retains
 its original image-build contents; do not rewrite the verified image to update status notes.
 

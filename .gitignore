@@ -1,19 +1,21 @@
 node_modules/
 .next/
 out/
-.env
-.env.local
-.env.*
+.env*
 !.env.example
-.vercel
+.vercel/
 *.log
 .DS_Store
+*.tsbuildinfo
 
-# local case and CLI output
+# Local evidence and maintenance artifacts
 /cases/
 /docs/cases/
 .codex-localappdata/
-*.tsbuildinfo
 
-.vercel
-.env*
+# Local coding-tool instructions and settings
+/AGENTS.md
+/CLAUDE.md
+/.agents/
+/.claude/
+/.codex/

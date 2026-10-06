@@ -1,105 +1,72 @@
 # KraxxDeceit
 
-**KraxxDeceit** is Kraxx's security-research engine for executing hostile web environments in isolated sandboxes and turning observed behavior into portable, reproducible security cases.
+KraxxDeceit is my browser security research project. I built it to make controlled web experiments inspectable: run a scenario in an isolated browser, record what happened, and keep the evidence together in a portable case.
 
-Public product surface: **KraxxDeceit.kraxxsec.com**
+[Try the demo](https://kraxxdeceit.kraxxsec.com/demo) · [Run a study](https://kraxxdeceit.kraxxsec.com/experiments) · [Read the guide](https://kraxxdeceit.kraxxsec.com/guide)
 
-Current controlled release: **v4.1.0**. `/demo` runs fixed synthetic scenarios with
-deterministic research by default; free AI remains experimental. `/workspace` provides
-authenticated private case storage with explicit save/delete and owner isolation.
-`/experiments` records four counterbalanced deterministic runs with local study
-JSON/CSV/Markdown/ZIP exports. Public rate limits can require waiting between runs;
-download partial studies to retain progress. Accounts are provisioned by the project
-owner. Arbitrary public URL investigations remain disabled.
-Start with the [public guide](https://kraxxdeceit.kraxxsec.com/guide).
-For portfolio/resume copy, see [project summary](docs/PROJECT-SUMMARY.md); for the
-release boundary and operational checks, see [launch checklist](docs/LAUNCH-CHECKLIST.md).
-See [delivery status](docs/STATUS.md), [operations](docs/OPERATIONS.md), and
-[v4 verification](docs/v4-verification.md) for observed checks and limits.
+## What it does
 
-## Architecture
+- Runs fixed prompt-injection and neutral-control scenarios in disposable Vercel Sandboxes with a pinned Playwright/Chromium image.
+- Combines browser observations, available process/socket telemetry, timelines, evidence graphs, and bounded hypotheses in one case.
+- Compares repeated runs through a four-step, counterbalanced study with explicit execution and resumable local progress.
+- Exports case JSON, Markdown, PDF, and ZIP bundles; studies also support CSV. Case digests and bundle checksums help detect changes to exported data.
+- Provides an invite-only workspace for explicitly saving, opening, and deleting private cases, with Supabase authentication and PostgreSQL row-level access controls.
+
+The public release is **v4.1.0**. Its default research sequence is deterministic and makes no model requests. It collects real browser evidence from synthetic fixtures. Optional free AI research is experimental and may fail when its provider is unavailable.
+
+Public investigations accept fixed scenarios, not arbitrary visitor-supplied URLs. Private accounts are provisioned by the project owner. Anyone can try the controlled demo and download local exports without an account.
+
+## How it works
 
 ```text
-URL
- ↓
-Vercel Sandbox (Firecracker microVM)
- ↓
-Controlled HTTP execution
- ↓
-Observed redirects / content / indicators
- ↓
-Portable case-shaped result
+Fixed scenario → validation and shared admission → disposable sandbox
+              → pinned browser + bounded evidence collection
+              → case assembly and integrity digest
+              → local inspection/export or explicit private save
 ```
 
-The public surface uses fixed synthetic fixtures. The local development console can
-inspect allowed URLs through the same safety checks. Results describe recorded
-observations and bounded hypotheses; they do not decide whether a URL is malicious.
+The application uses Next.js, React, and TypeScript. Vercel Sandbox isolates browser execution; Upstash Redis coordinates production admission; Supabase handles private accounts and case storage. PDF and ZIP exports are generated in the browser.
 
-## What is included
+I chose a controlled public scope so the experiment inputs and execution limits are visible. The engine separates recorded observations from hypotheses, checks URLs and destinations, limits work before allocating compute, and retains partial evidence when a provider fails. A hypothesis is not a verdict that a site is malicious, and a checksum does not establish that an observation is true.
 
-- Next.js web interface
-- `POST /api/investigate`
-- `@vercel/sandbox` integration
-- Disposable Vercel Sandbox per investigation
-- URL validation
-- controlled HTTP fetch inside the sandbox
-- redirect/final-URL observation
-- basic public-IOC extraction
-- portable case data model
-- CLI: `npm run cli -- inspect <url>`
+See [architecture](docs/ARCHITECTURE.md) for the boundaries and [verification](docs/VERIFICATION.md) for recorded checks and their limits.
 
-## Local setup
+## Run locally
 
-Vercel Sandbox's current SDK is `@vercel/sandbox` 3.5.1. Sandboxes run as isolated Firecracker microVMs. The default runtime includes Node.js 24 and Python 3.14. See Vercel's current Sandbox docs for limits and authentication.
+Use **Node.js 24.x** and npm.
 
-1. Install Node.js 24+.
-2. Install the Vercel CLI and authenticate.
-3. From this repository:
-
-```bash
-vercel link
-vercel env pull .env.local
-npm install
+```sh
+npm ci
 npm run dev
 ```
 
-4. Open `http://localhost:3000`.
+Open [localhost:3000](http://localhost:3000). Copy [.env.example](.env.example) to a local `.env.local` and configure only the services you intend to use. Never commit credentials.
 
-The CLI uses the same engine:
+The UI and local case import/export are separate from remote investigation execution. Running an investigation requires Vercel Sandbox authentication and access to the pinned browser image. The deployed image is in a private registry; a fresh clone does not grant access. See the [browser image contract](sandbox/README.md) for verification and the remaining clean-machine build limitation.
 
-```bash
-npm run cli -- inspect https://example.com
+For an authorized Vercel project, use `vercel link` and `vercel env pull .env.local` to configure local access. Private storage additionally requires a Supabase project, the [database migration](supabase/migrations/202610040001_private_cases.sql), and an owner-provisioned test account. Use a publishable/anon key, never a service-role key. Production admission requires Upstash Redis. Deterministic research does not need a model API key.
+
+## Development checks
+
+```sh
+npm run typecheck
+npm run test:experiment
+npm run build
 ```
 
-## Important security note
+Remote verification scripts create resources or use external services and are separate from these checks. Read [operations](docs/OPERATIONS.md) before running them.
 
-**Do not expose the public URL endpoint to arbitrary internet users yet.** The Stage 1 endpoint is a research scaffold. Before a public launch, add strict egress controls, SSRF protections, rate limiting, request budgets, case-size limits, browser isolation and a controlled target allow/deny policy.
+## Scope and limitations
 
-Vercel Sandbox supports host/CIDR egress policies and dynamic policy updates; use those controls when we move to public deployment.
+- This is a controlled research application, not a malware verdict service or a general-purpose public scanner.
+- The repeated study exercises deterministic behavior; it does not measure model susceptibility or establish statistical causality.
+- Telemetry is bounded. Browser events and process/socket samples do not provide complete kernel visibility; eBPF attachment is not established.
+- Free AI reliability remains unresolved. Failures are surfaced as incomplete research.
+- Exports can contain evidence supplied by their owner. Review them before sharing; automatic anonymization and public case links are not provided.
+- Hourly monitoring checks application liveness, not successful investigations or upstream service readiness.
 
-## Roadmap
+[Current status and follow-ups](docs/STATUS.md) · [Security boundaries](docs/production-hardening.md) · [Operations](docs/OPERATIONS.md)
 
-### Stage 1
-URL → sandbox → controlled fetch → case
+## Maintainer
 
-### Stage 2
-URL → Playwright/Chromium → DOM, redirects, network, screenshots, browser trace
-
-### Stage 3
-URL → controlled AI-browser agent → agent observations/actions
-
-### Stage 4
-OS + network telemetry → process, DNS, socket, filesystem events
-
-### Stage 5
-Evidence graph → supported causal relationships → confidence + evidence links
-
-### Stage 6
-Replayable `.kraxxcase` format + portable investigation packages
-
-### Stage 7
-Research platform, CLI distribution, and Kraxxsec integration
-
-## Current design principle
-
-AI may generate hypotheses. **Observed telemetry remains the source of truth.**
+Created and maintained by [Mohamed Basil](https://github.com/Basilmellow) as part of my KRAxx security projects. For reproducible, non-sensitive bugs or suggestions, open a repository issue. Do not include credentials or private case evidence in public issues.

@@ -10,6 +10,6 @@ The current fallback samples `/proc` and Linux socket tables. A future eBPF imag
 
 ## Observed capability status
 
-No live remote probe result is recorded in this checkout yet. The local development environment previously denied the SDK connection with `EACCES ...:443` before `Sandbox.create()` reached Vercel. That is an authentication/network-path blocker, not evidence about telemetry inside a Vercel Sandbox. Until `npm run probe:sandbox` completes remotely, kernel details, process/socket observation, and eBPF capabilities are **unobserved**. Do not infer production support from the SDK default image or local results.
+A recorded remote probe is available in the [capability report](sandbox-capability-report.md) and [machine-readable result](sandbox-capability.json). Treat it as a dated runtime observation, not a guarantee about every sandbox. The probe does not establish eBPF program attachment. Application telemetry uses bounded process/socket sampling and browser observations.
 
 A custom image may be useful if the live probe shows the default image lacks required user-space tools and the Vercel runtime can provide the needed kernel interfaces and capabilities. The live report should guide that decision; a custom image cannot by itself grant host kernel privileges.
